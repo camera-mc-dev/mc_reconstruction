@@ -1,0 +1,52 @@
+import os
+
+# pull in the parent environment
+Import('env')
+Import('buildDir')
+Import('bm')
+
+# copy environment so we don't change it
+srcEnv = env.Clone()
+
+
+# -----------------------------------------------
+#
+# Find source files and directories and build library
+#
+# -----------------------------------------------
+
+# scons might have the current working directory
+# somewhere under build/
+# we want to be sure we're under the source directory,
+# which we can get from Dir(".")
+sconsDir = os.getcwd()
+os.chdir("%s"%(Dir(".").srcnode().abspath))
+
+# now find all the source files under this tree
+cpps = []
+for root,dir,files in os.walk(".", followlinks=True):
+	for f in files:
+		if f[-4:] == ".cpp":
+			cpps.append("%s/%s"%(root,f))
+
+
+# all those source files will be compiled into
+# object files, so we can be explicit about the
+# name of those object files - mostly just because
+# we have all these build modes.
+objs = []
+for f in cpps:
+	# so the object file gets a name that includes
+	# the build mode, to avoid ambiguity
+	on = "%s-%s"%(f[:-4], bm)
+
+	# then we tell scons how to build it :)
+	objs.append( srcEnv.Object(on, f) )
+
+# and all those object files simply archive into
+# a static library.
+libTarget = srcEnv.StaticLibrary('libMC-recon', objs)
+
+os.chdir(sconsDir)
+
+

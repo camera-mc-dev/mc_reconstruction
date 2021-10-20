@@ -1,0 +1,69 @@
+import os
+
+# pull in the parent environment
+Import('env')
+Import('buildDir')
+Import('bm')
+
+# copy environment so that we don't change it
+srcEnv = env.Clone()
+
+
+# --------------------------------------------
+#
+# We now need to find all the test source files.
+# We assume for now that all tests are single .cpp
+# files unless they are in a directory with an SConscript
+# file. In which case, we defer compilation of the test
+# to that SConscript file.
+#
+# --------------------------------------------
+
+sconsDir = os.getcwd()
+os.chdir("%s"%(Dir(".").srcnode().abspath))
+
+# a small "quirk" of scons is that it automatically works out
+# which compiler to call. Only trouble with that is that, once we've
+# got into a build directory, it kind of forgets, and at the linker stage,
+# sees just .o files and thus uses gcc. Using gcc when everything else is c++
+# means it doesn't automatically pull in the c++ libraries. Ooops.
+srcEnv.Replace(LINK=srcEnv['CXX'])
+
+# make sure we link against our library
+srcEnv.Append(LIBPATH = ["%s/../mc_core/%s/src"%(Dir('#').abspath, buildDir)])
+srcEnv.Prepend(LIBS = ["MC-core"])
+
+srcEnv.Append(LIBPATH = ["%s/../mc_sds/%s/src"%(Dir('#').abspath, buildDir)])
+srcEnv.Prepend(LIBS = ["MC-sds"])
+
+srcEnv.Append(CPPPATH = ["%s/src"%(Dir('#').abspath)] )
+srcEnv.Append(LIBPATH = ["%s/%s/src"%(Dir('#').abspath, buildDir)])
+srcEnv.Prepend(LIBS = ["MC-recon"])
+
+# now find the source files.
+
+# find any .cpp files in the current directory.
+cpps = [f for f in os.listdir('.') if f[-4:] == '.cpp']
+
+# now search through any subDirectories.
+# we are only going to go one level deep.
+dirs = [f for f in os.listdir('.') if os.path.isdir(f) ]
+for d in dirs:
+	dfs = os.listdir(d)
+	if "SConscript" in dfs:
+		# defer to that file...
+		env.SConscript(dirs=[d], variant_dir="%s/tests/%s"%(buildDir,d), exports ='env buildDir bm', duplicate=False)
+	else:
+		dcpps = ["%s/%s"%(d,f) for f in dfs if f[-4:] == '.cpp']
+		cpps = cpps + dcpps
+
+for f in cpps:
+	srcf = "%s"%f
+	objf = "%s/%s/tests/%s"%( Dir('#').abspath, buildDir, f[:-4] )
+
+	targ = srcEnv.Object(objf, srcf)
+	srcEnv.Program(targ)
+
+
+# and go back to whatever directory scons was already in
+os.chdir(sconsDir)
