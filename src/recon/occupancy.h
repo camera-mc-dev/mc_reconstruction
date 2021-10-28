@@ -114,6 +114,11 @@ public:
 		return groundPoints[row][col] + upDir * (settings.obsPlanes[plane].low + settings.obsPlanes[plane].high)/2.0f;
 	}
 	
+	cv::Rect GetCellBBox( unsigned plane, unsigned row, unsigned col, unsigned view )
+	{
+		return bboxes[row][col][plane][view];
+	}
+	
 	
 	int GetMapRows() {return mapRows;}
 	int GetMapCols() {return mapCols;}
@@ -141,6 +146,7 @@ protected:
 	std::vector< cv::Mat > intMasks;
 	float GetFGRatio( cv::Mat intMask, cv::Rect bb );
 	float GetFGRatio( cv::Mat mask, genMatrix linePoints );
+	float CheckPoints( std::vector< hVec2D > &points, cv::Rect bb );
 	
 	//
 	// Other data

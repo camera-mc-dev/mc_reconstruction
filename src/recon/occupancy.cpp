@@ -125,13 +125,48 @@ void OccupancyMap::OccupancyFromSegmentation(
 }
 
 
+float OccupancyMap::CheckPoints( std::vector< hVec2D > &points, cv::Rect bb )
+{
+	int in = 0;
+	for( unsigned pc = 0; pc < points.size(); ++pc )
+	{
+		if(
+		    points[pc](0) >= bb.x && points[pc](0) < bb.x + bb.width &&
+		    points[pc](1) >= bb.y && points[pc](1) < bb.y + bb.height 
+		  )
+		{
+			++in;
+		}
+	}
+	return std::min(1,in);
+}
+
 
 void OccupancyMap::OccupancyFromPoints( 
                                          std::vector< std::vector< hVec2D > > &points, 
                                          std::vector< cv::Mat > &maps
                                       )
 {
-	throw std::runtime_error("Not done occupancy from points yet");
+	// put simply, is the point inside the bbox of the cell?
+	maps.resize( settings.obsPlanes.size() );
+	for( unsigned pc = 0; pc < settings.obsPlanes.size(); ++pc )
+	{
+		maps[pc] = cv::Mat( mapRows, mapCols, CV_32FC1, cv::Scalar(0.0f) );
+	}
+	for( unsigned bc = 0; bc < mapRows; ++bc )
+	{
+		for( unsigned ac = 0; ac < mapCols; ++ac )
+		{
+// 			#pragma omp parallel for
+			for( unsigned pc = 0; pc < settings.obsPlanes.size(); ++pc )
+			{
+				for( unsigned vc = 0; vc < settings.calibs.size(); ++vc )
+				{
+					maps[pc].at<float>(bc,ac) += CheckPoints( points[vc], bboxes[bc][ac][pc][vc] );
+				}
+			}
+		}
+	}
 }
 
 

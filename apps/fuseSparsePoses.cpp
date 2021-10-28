@@ -994,7 +994,7 @@ public:
 		// First term of the error: keep the two points apart from each other.
 		//
 		float d  = (p0-p1).norm();
-		float e0 = std::max(0.0f, -log(d/20.0f) );    // 20.0 mm selected as where the error reaches 0.
+		float e0 = std::max(0.0f, (float)-log(d/20.0f) );    // 20.0 mm selected as where the error reaches 0.
 		
 		//
 		// Compute the distance of the rays from each point.
