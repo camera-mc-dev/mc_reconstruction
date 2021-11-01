@@ -32,11 +32,20 @@ srcEnv.Replace(LINK=srcEnv['CXX'])
 # find out where the current SConscript file was.
 scfpath = Dir('.').srcnode().abspath
 
-
 # make sure we link against our library
-srcEnv.Append(CPPPATH = ["%s/../src"%(scfpath)] )
+srcEnv.Append(LIBPATH = ["%s/../../mc_core/%s/src"%(scfpath, buildDir)])
 srcEnv.Prepend(LIBS = ["MC-core"])
+
+srcEnv.Append(LIBPATH = ["%s/../../mc_sds/%s/src"%(scfpath, buildDir)])
+srcEnv.Prepend(LIBS = ["MC-sds"])
+
+srcEnv.Append(CPPPATH = ["%s/../src"%(scfpath)] )
 srcEnv.Append(LIBPATH = ["%s/../%s/src"%(scfpath, buildDir)])
+srcEnv.Prepend(LIBS = ["MC-recon"])
+
+
+
+
 
 # now find the source files.
 
@@ -58,7 +67,6 @@ for d in dirs:
 for f in cpps:
 	srcf = "%s"%f
 	objf = "%s/../%s/tests/%s"%(scfpath , buildDir, f[:-4] )
-	print( objf )
 	targ = srcEnv.Object(objf, srcf)
 	srcEnv.Program(targ)
 

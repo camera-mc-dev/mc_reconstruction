@@ -2,6 +2,7 @@ import os,sys
 
 sys.path.append("../mc_core/")
 import mcdev_core_config as corecfg
+import mcdev_recon_config as reconcfg
 
 # ---------------------------------------------------------
 # results of some checks.
@@ -15,6 +16,7 @@ openmpAvailable = True
 def SetPathsLibsAndFlagsAll(env):
 	
 	corecfg.SetCoreConfig(env)
+	reconcfg.SetReconConfig(env)
 	env.Append(CPPPATH=["%s/../mc_core/src"%(Dir('.').abspath)])
 	env.Append(CPPPATH=["%s/../mc_sds/src"%(Dir('.').abspath)])
 	
