@@ -74,6 +74,10 @@ bool IsLeft( int jc, skeleton_t skel );
 // is a single frame.
 void ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses );
 
+// this one also handles OpenPose and AlphaPose but looks for all 
+//
+void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > &poses );
+
 // and this for DeelLabCut - it reads all the frames of a sequence.
 void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > &poses );
 

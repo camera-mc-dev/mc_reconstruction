@@ -1,6 +1,84 @@
 #include "recon/poseFusion/poseFusion.h"
 #include <cv.hpp>
 
+int FNoFromJSONFilename( skeleton_t skelType, boost::filesystem::path pth )
+{
+	int num = -1;
+	
+	if( skelType == SKEL_OPOSE || skelType == SKEL_APOSE )
+	{
+		// we normally have a filename something like xx_<number>_keypoints.json
+		// so let us try...
+		std::string fn = pth.filename().string();
+		int b = fn.rfind("_keypoints");
+		if( b == std::string::npos )
+			break;
+		
+		int a = fn.rfind("_", b);
+		if( a == std::string::npos )
+			a = 0;
+		
+		std::string numStr( fn.begin() + a, fn.begin()+b );
+		
+		num = atoi( numStr ); 
+	}
+	
+	if( num < 0 )
+	{
+		// we've not found it yet. Darn.
+		cout << "Don't know how to get a frame number from a filename of: " << fn << endl;
+		throw std::runtime_error("Can't parse frame number from filename.");
+	}
+	
+	return num;
+	
+}
+
+void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > &poses )
+{
+	std::vector< boost::filesystem::path > jsonFiles;
+	
+	// find the images in the directory.
+	boost::filesystem::path p(dir);
+	
+	if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+	{
+		boost::filesystem::directory_iterator di(p), endi;
+		for( ; di != endi; ++di )
+		{
+			std::string s = di->path().string();
+			auto e = di->path().extension();
+			if( e.compare("json") == 0 )
+			{
+				jsonFiles.push_back( di->path() );
+			}
+		}
+		else
+		{
+			throw std::runtime_error("Could not find image source directory.");
+		}
+	}
+	
+	std::sort( jsonFiles.begin(), jsonFiles.end() );
+	
+	//
+	// Now load each json file.
+	//
+	for( unsigned fc = 0; fc < jsonFiles.size(); ++fc )
+	{
+		//
+		// Parse the filename to figure out the frame number.
+		//
+		int frameNo = FNoFromJSONFilename( data.skelType, jsonFiles[fc] );
+		
+		//
+		// Load the data from the file.
+		//
+		ReadPoseJSON( jsonFiles[fc], poses[frameNo] );
+	}
+}
+
+
 bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 {
 	// load the correct json file.

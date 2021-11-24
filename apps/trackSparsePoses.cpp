@@ -1,4 +1,5 @@
 #include "recon/poseFusion/poseFusion.h"
+#include "imgio/sourceFactory.h"
 
 #include <iostream>
 using std::cout;
@@ -34,6 +35,7 @@ struct SData
 	
 	std::vector< std::string > calibFiles;
 	std::vector< std::shared_ptr<ImageSource> > imgSources;
+	std::vector< std::string > poseSources;
 	
 	// [cam][frame][person]
 	std::vector< std::map< int, PersonPose > > pcPoses;
@@ -43,11 +45,10 @@ struct SData
 	int firstFrame;
 }
 
-
 void ParseConfig( std::string cfgFile, SData &data )
 {
 	try
-	{	
+	{
 		CommonConfig ccfg;
 		data.dataRoot = ccfg.dataRoot;
 		
@@ -59,25 +60,54 @@ void ParseConfig( std::string cfgFile, SData &data )
 			data.dataRoot = (const char*)cfg.lookup("dataRoot");
 		data.testRoot = (const char*)cfg.lookup("testRoot");
 		
-		libconfig::Setting &imgSrcSetting  = cfg.lookup("imgSources");
 		libconfig::Setting &calibsSetting  = cfg.lookup("calibFiles");
 		libconfig::Setting &poseSrcSetting = cfg.lookup("poseSources");
 		
 		assert( poseSrcSetting.getLength() == calibs.getLength() );
 		
-		data.maskSources.resize( maskDirs.getLength() );
 		data.occSettings.calibs.resize( maskDirs.getLength() );
 		for( unsigned sc = 0; sc < maskDirs.getLength(); ++sc )
 		{
-			std::stringstream mss, css;
-			mss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) maskDirs[sc];
+			std::stringstream css;
 			css << data.dataRoot << "/" << data.testRoot << "/" << (const char*) calibs[sc];
 			
 			cout << css.str() << endl;
-			cout << mss.str() << endl;
-			data.maskSources[sc].reset( new ImageDirectory(mss.str(), css.str()) );
 			
-			data.occSettings.calibs[sc] = data.maskSources[sc]->GetCalibration();
+			data.occSettings.calibs[sc].Read( css.str() );
+		}
+		
+		data.poseSources.resize( poseSrcSetting.getLength() );
+		for( unsigned sc = 0; sc < poseSrcSetting.getLength(); ++sc )
+		{
+			data.poseSources[sc] = (const char*) poseSrcSetting[sc];
+		}
+		
+		if( cfg.exists("imgSources") )
+		{
+			libconfig::Setting &imgSrcSetting  = cfg.lookup("imgSources");
+			
+			for( unsigned sc = 0; sc < imgSrcSetting.getLength(); ++sc )
+			{
+				std::stringstream iss;
+				iss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) imgSrcSetting[sc];
+				
+				auto sp = CreateSource( iss.str() ); // doesn't matter that the source doesn't have the calibration, we have the calibration in the occSettings anyway.
+			}
+		}
+		
+		
+		std::string s = (const char*)cfg.lookup("skelType");
+		if( s.compare("open") == 0 || s.compare("openpose") == 0 )
+		{
+			data.skelType = SKEL_OPOSE;
+		}
+		if( s.compare("alpha") == 0 || s.compare("alphapose") == 0 )
+		{
+			data.skelType = SKEL_APOSE;
+		}
+		if( s.compare("dlc") == 0 || s.compare("deeplabcut") == 0 )
+		{
+			data.skelType = SKEL_DLCUT;
 		}
 		
 		
@@ -147,6 +177,27 @@ void ParseConfig( std::string cfgFile, SData &data )
 }
 
 
+void LoadPoses( SData &data )
+{
+	data.pcPoses.resize( data.poseSources.size() );
+	
+	for( unsigned sc = 0; sc < data.poseSources.size(); ++sc )
+	{
+		// type of skeleton affects how we load data :(
+		switch( data.skelType )
+		{
+			case SKEL_OPOSE:
+			case SKEL_APOSE:
+				ReadPoseDirJSON( data.poseSources[sc], data.pcPoses[sc] );
+				break;
+			
+			case SKEL_DLCUT:
+				ReadDLC_CSV( data.poseSources[sc], data.pcPoses[sc] );
+				break;
+		}
+	}
+}
+
 
 
 int main( int argc, char* argv[] )
@@ -172,7 +223,13 @@ int main( int argc, char* argv[] )
 	
 	
 	//
-	// 
+	// Load the pose data.
+	//
+	LoadPoses( data );
+	
+	
+	//
+	// Now we can do all the occupancy map stuff.
 	//
 	
 }
