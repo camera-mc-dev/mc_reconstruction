@@ -1,6 +1,15 @@
 #include "math/mathTypes.h"
-
 #include "recon/occupancy.h"
+#include "SDS/opt.h"
+#include "math/distances.h"
+#include "tracking/occupancyTracker.h"
+
+#include <vector>
+#include <map>
+
+
+#include <stdexcept>
+#include <boost/filesystem.hpp>
 
 // 
 // Input structure:
@@ -72,14 +81,14 @@ bool IsLeft( int jc, skeleton_t skel );
 
 // this one is for OpenPose and AlphaPose - it reads a single file which
 // is a single frame.
-void ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses );
+bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses );
 
 // this one also handles OpenPose and AlphaPose but looks for all 
 //
-void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > &poses );
+void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::vector< PersonPose > > &poses );
 
 // and this for DeelLabCut - it reads all the frames of a sequence.
-void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > &poses );
+void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses );
 
 
 

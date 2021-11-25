@@ -1,26 +1,27 @@
 #include "recon/poseFusion/poseFusion.h"
 #include <cv.hpp>
 
+#include "misc/tokeniser.h"
+
 int FNoFromJSONFilename( skeleton_t skelType, boost::filesystem::path pth )
 {
 	int num = -1;
+	std::string fn = pth.filename().string();
 	
 	if( skelType == SKEL_OPOSE || skelType == SKEL_APOSE )
 	{
 		// we normally have a filename something like xx_<number>_keypoints.json
 		// so let us try...
-		std::string fn = pth.filename().string();
 		int b = fn.rfind("_keypoints");
-		if( b == std::string::npos )
-			break;
-		
-		int a = fn.rfind("_", b);
-		if( a == std::string::npos )
-			a = 0;
-		
-		std::string numStr( fn.begin() + a, fn.begin()+b );
-		
-		num = atoi( numStr ); 
+		if( b != std::string::npos )
+		{
+			int a = fn.rfind("_", b-1);
+			if( a == std::string::npos )
+				a = 0;
+			
+			std::string numStr( fn.begin() + a + 1, fn.begin()+b );
+			num = atoi( numStr.c_str() );
+		}
 	}
 	
 	if( num < 0 )
@@ -34,7 +35,7 @@ int FNoFromJSONFilename( skeleton_t skelType, boost::filesystem::path pth )
 	
 }
 
-void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > &poses )
+void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::vector< PersonPose > > &poses )
 {
 	std::vector< boost::filesystem::path > jsonFiles;
 	
@@ -48,15 +49,15 @@ void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > 
 		{
 			std::string s = di->path().string();
 			auto e = di->path().extension();
-			if( e.compare("json") == 0 )
+			if( e.compare(".json") == 0 )
 			{
 				jsonFiles.push_back( di->path() );
 			}
 		}
-		else
-		{
-			throw std::runtime_error("Could not find image source directory.");
-		}
+	}
+	else
+	{
+		throw std::runtime_error("Could not find json source directory.");
 	}
 	
 	std::sort( jsonFiles.begin(), jsonFiles.end() );
@@ -69,13 +70,15 @@ void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > 
 		//
 		// Parse the filename to figure out the frame number.
 		//
-		int frameNo = FNoFromJSONFilename( data.skelType, jsonFiles[fc] );
+		int frameNo = FNoFromJSONFilename( skelType, jsonFiles[fc] );
 		
 		//
 		// Load the data from the file.
 		//
-		ReadPoseJSON( jsonFiles[fc], poses[frameNo] );
+		ReadPoseJSON( jsonFiles[fc].string(), poses[frameNo] );
 	}
+	
+	cout << p.string() << " " << jsonFiles.size() << " " << poses.size() << endl;
 }
 
 
@@ -139,14 +142,14 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 }
 
 
-void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > &poses )
+void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses )
 {
 	poses.clear();
 	
 	std::ifstream infi( fn );
 	if( !infi )
 	{
-		throw std::runtime_error("Could not open DLC csv file : " + data.opDirs[isc] );
+		throw std::runtime_error("Could not open DLC csv file : " + fn );
 	}
 	
 	std::vector< std::vector< std::string > > lines;
@@ -202,8 +205,8 @@ void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > &pose
 		std::sort( zs.begin(), zs.end() );
 		std::sort( cs.begin(), cs.end() );
 		
-		p.synTestPoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], zs[ zs.size()/2 ];
-		p.synConfidence = cs[ cs.size()/2 ];
+		p.representativePoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], zs[ zs.size()/2 ];
+		p.representativeConfidence = cs[ cs.size()/2 ];
 		
 		
 		poses[ frameNo ].push_back( p );
