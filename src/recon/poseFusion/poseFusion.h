@@ -91,28 +91,7 @@ void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::
 void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses );
 
 
-
-//
-// Now we can have the actual pose reconstruction algorithms.
-//
-// Most of the sparse pose detectors will give us multiple people in a scene, but the ids
-// of those people will not be consistent between different views. So our first job is to
-// handle cross-camera person associations.
-//
-// We assume that you have made use of an Occupancy Map or Occupancy Tracker to identify
-// probable locations of people in the scene. This function takes in those probable locations
-// and finds out the best association of detection to occupancy location.
-//
-// Occupancy locations should be given as lines, as pairs of points - approx foot, approx head.
-// The resulting PersonPose3D will not have 3D joints, but will have grouped together the relevant
-// 2d poses - at most one per camera.
-//
-std::vector< PersonPose3D > PredictPeople( 
-                                           std::vector< std::vector< PersonPose > > pcPeople,  // detections per-camera
-                                           std::vector< Calibration > calibs,                  // calibrations
-                                           std::vector< std::pair<hVec3D, hVec3D> > occLine    // probable locations
-                                         );  
-                                           
+                            
 
 
 //

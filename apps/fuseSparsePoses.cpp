@@ -699,7 +699,6 @@ hVec3D RobustIntersectRays3D( std::vector< hVec3D > &starts, std::vector< hVec3D
 }
 
 
-
 void PredictPeople( Data &data, std::vector< std::vector< std::pair<int,int> > > &pgroups )
 {
 	//
@@ -872,7 +871,7 @@ void PredictPeople( Data &data, std::vector< std::vector< std::pair<int,int> > >
 	
 	
 	float visThresh = data.minVisibility / (float)data.imgSources.size();
-	if( synMap.at<float>(ML.y, ML.x) > data.synThresh && visMap.at<float>(ML.y, ML.x) > visThresh  )
+	if( synMap.at<float>(ML.y, ML.x) > data.synThresh && visMap.at<float>(ML.y, ML.x) >= visThresh  )
 	{
 		cout << "creating pgroup: " << ML << "(syn: " << synMap.at<float>(ML.y, ML.x) << " vis: " << visMap.at<float>(ML.y,ML.x) *data.imgSources.size() << ")" << endl;
 		pgroups.resize(1);
@@ -1451,8 +1450,9 @@ void ReconstructPeople( Data &data, std::vector< std::vector< std::pair<int,int>
 				ReconstructSingleJoint( data, pgroups[pc], jc, newPerson, inliers );
 				doneJoint[jc] = true;
 			}
-			
 		}
+		
+		
 		
 		// check that the newPerson is inside of the valid area.
 		if( newPerson.joints[1](0) > data.floorMinX && newPerson.joints[1](0) < data.floorMaxX &&

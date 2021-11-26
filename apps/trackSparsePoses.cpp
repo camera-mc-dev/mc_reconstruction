@@ -174,7 +174,7 @@ void ParseConfig( std::string cfgFile, SData &data )
 		}
 		
 		std::stringstream oss;
-		oss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) cfg.lookup("outputFile");
+		oss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) cfg.lookup("assocFile");
 		data.outfile = oss.str();
 		
 	}
@@ -426,6 +426,7 @@ int main( int argc, char* argv[] )
 	outfi << tracks.size() << endl;
 	for( unsigned tc = 0; tc < tracks.size(); ++tc )
 	{
+		outfi << tracks[tc].framePeaks.size() << endl;
 		for( auto fi = tracks[tc].framePeaks.begin(); fi != tracks[tc].framePeaks.end(); ++fi )
 		{
 			// point on the map
@@ -464,8 +465,6 @@ int main( int argc, char* argv[] )
 
 int GetPersonForTrack( int frameNo, int view, cv::Rect cellBB, SData &data )
 {
-	cout << endl << endl;
-	
 	//
 	// I don't really like this approach, but if it works, it works.
 	//
