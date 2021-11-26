@@ -45,6 +45,13 @@ struct SData
 	
 	skeleton_t skelType;
 	
+	
+	// RANSAC settings for single joint reconstruction.
+	float distanceThreshold;
+	int minInliers;
+	
+	
+	
 	int firstFrame;
 	
 	bool visualise;
@@ -128,8 +135,6 @@ void ParseConfig( std::string cfgFile, SData &data )
 // 		data.occSettings.minZ = cfg.lookup("minZ");  // not using because always z-up
 // 		data.occSettings.maxZ = cfg.lookup("maxZ");
 		
-		data.occSettings.cellSize = cfg.lookup("cellSize");
-		
 		std::string upDir = (const char*) cfg.lookup("upDir");
 		if( upDir.compare("x") == 0 )
 		{
@@ -145,20 +150,8 @@ void ParseConfig( std::string cfgFile, SData &data )
 		}
 		
 		
-		OccupancyMap::SObsPlane obsPlane;
-		obsPlane.low  =  cfg.lookup("planeLow");
-		obsPlane.high = cfg.lookup("planeHigh");
-		data.occSettings.obsPlanes.push_back( obsPlane );
-		
-		data.occSettings.cellPadding = cfg.lookup("cellPadding");
-		
-		
-		data.trackSettings.minVisibility = cfg.lookup("minVisibility");
-		data.trackSettings.useVisibility = cfg.lookup("useVisibility");
-		data.trackSettings.detectionThreshold = cfg.lookup("detectionThreshold");
-		
-		data.trackSettings.distanceThreshold = 12.0f;
-		data.trackSettings.numNearPeaks      = 50;
+		data.distanceThreshold = cfg.lookup("singleJointDistanceThreshold");
+		data.minInliers        = cfg.lookup("singleJointMinInliers");
 		
 		
 		data.firstFrame = 0;
@@ -327,7 +320,7 @@ int main( int argc, char* argv[] )
 			//
 			// And then we use the relevant fusion method to get the 3D pose.
 			//
-			ReconstructPerson( pers3d, data.occSettings.calibs );
+			ReconstructPerson( pers3d, data.skelType, data.occSettings.calibs, data.minInliers, data.distanceThreshold );
 			
 			fusedFrames[ frame ] = pers3d;
 		}

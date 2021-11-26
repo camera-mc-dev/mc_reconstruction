@@ -113,3 +113,17 @@ int IsPair( int jc, skeleton_t skel )
 	}
 	return false;
 }
+
+
+int SkelNumJoints( skeleton_t skel )
+{
+	switch( skel )
+	{
+		case SKEL_OPOSE:
+			return 25; 
+		case SKEL_APOSE:
+			return 18;
+		case SKEL_DLCUT:
+			return 14;
+	}
+}

@@ -1,3 +1,6 @@
+#ifndef MC_POSEFUSION_H
+#define MC_POSEFUSION_H
+
 #include "math/mathTypes.h"
 #include "recon/occupancy.h"
 #include "SDS/opt.h"
@@ -68,7 +71,7 @@ enum skeleton_t {SKEL_OPOSE, SKEL_APOSE, SKEL_DLCUT};
 int IsPair( int jc, skeleton_t skel );
 bool IsLeft( int jc, skeleton_t skel );
 
-
+int SkelNumJoints( skeleton_t skel );
 
 
 
@@ -100,8 +103,11 @@ void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &po
 //
 void ReconstructPerson( 
                         PersonPose3D &person,
-                        std::vector< Calibration > calibs
-                      );  
+                        skeleton_t skelType,
+                        std::vector< Calibration > calibs,
+                        int   minInliersRANSAC,
+                        float distThreshRANSAC
+                      ); 
                                           
 //
 // Reconstructing people involves making robust estimates of their 3D joint locations. 
@@ -115,8 +121,11 @@ void ReconstructPerson(
 //
 //
 
-void ReconstructJoint( std::vector< Calibration > calibs, int jc0, PersonPose3D &person );
-void ReconstructJointPair( std::vector< Calibration > calibs, int jc0, int jc1, PersonPose3D &person );
+hVec3D RANSACIntersectRays3D( std::vector< hVec3D > &starts, std::vector< hVec3D > &rays, std::vector<float> &confidences, std::vector<int> &resInliers, float thresh );
+
+
+void ReconstructSingleJoint( std::vector< Calibration > calibs, int jc0, float distanceThresh, int minNumInliers, PersonPose3D &person );
+void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelType, int jc0, int jc1, PersonPose3D &person );
 
 class JointPairAgent : public SDS::Agent
 {
@@ -328,3 +337,5 @@ protected:
 //        24    21      Heels             ||                                    ||    
 //         22  19       Big toes          ||                                    ||    
 //       23      20     Little toes       ||                                    ||    
+
+#endif
