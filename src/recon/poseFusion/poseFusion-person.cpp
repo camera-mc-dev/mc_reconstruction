@@ -5,6 +5,8 @@ void ReconstructPerson(
                         PersonPose3D &person,
                         skeleton_t skelType,
                         std::vector< Calibration > calibs,
+                        float minConf,
+                        leftRightDecision_t lrd,
                         int   minInliersRANSAC,
                         float distThreshRANSAC
                       )
@@ -21,13 +23,30 @@ void ReconstructPerson(
 		int pairedJoint = IsPair( jc, skelType );
 		if( pairedJoint >= 0 )
 		{
-			ReconstructJointPair( calibs, skelType, jc, pairedJoint, person );
+			ReconstructJointPair( calibs, skelType, jc, pairedJoint, minConf, lrd, person );
 			doneJoint[jc] = true;
 			doneJoint[pairedJoint] = true;
+			
+			if( std::isnan( person.joints[jc](0) ) || std::isnan(person.joints[jc](1)) || std::isnan(person.joints[jc](2) ) )
+			{
+				cout << "damn a " << jc << endl;
+				exit(0);
+			}
+			
+			if( std::isnan( person.joints[pairedJoint](0) ) || std::isnan(person.joints[pairedJoint](1)) || std::isnan(person.joints[pairedJoint](2) ) )
+			{
+				cout << "damn b " << pairedJoint << endl;
+				exit(0);
+			}
 		}
 		else
 		{
-			ReconstructSingleJoint( calibs, jc, distThreshRANSAC, minInliersRANSAC, person );
+			ReconstructSingleJoint( calibs, jc, minConf, distThreshRANSAC, minInliersRANSAC, person );
+			if( std::isnan( person.joints[jc](0) ) || std::isnan(person.joints[jc](1)) || std::isnan(person.joints[jc](2) ) )
+			{
+				cout << "damn " << jc << endl;
+				exit(0);
+			}
 			doneJoint[jc] = true;
 		}
 	}

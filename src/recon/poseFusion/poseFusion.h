@@ -67,6 +67,16 @@ struct PersonPose3D
 // a pair of joints (e.g. wrists, elbows, knees, etc...).
 //
 enum skeleton_t {SKEL_OPOSE, SKEL_APOSE, SKEL_DLCUT};
+enum leftRightDecision_t
+{
+	// for the first two sets of options, we know the person is facing parallel
+	// to one of the scene planes, and we know also which direction they're facing.
+	LRD_XPLANE_POS, LRD_YPLANE_POS, LRD_ZPLANE_POS, // face towards +ve infinity
+	LRD_XPLANE_NEG, LRD_YPLANE_NEG, LRD_ZPLANE_NEG, // face towards -ve infinity
+	
+	// figure out which point each ray is closest to and vote on left vs. right.
+	LRD_VOTE
+};
 
 int IsPair( int jc, skeleton_t skel );
 bool IsLeft( int jc, skeleton_t skel );
@@ -105,6 +115,8 @@ void ReconstructPerson(
                         PersonPose3D &person,
                         skeleton_t skelType,
                         std::vector< Calibration > calibs,
+                        float minConf,
+                        leftRightDecision_t lrd,
                         int   minInliersRANSAC,
                         float distThreshRANSAC
                       ); 
@@ -123,10 +135,19 @@ void ReconstructPerson(
 
 hVec3D RANSACIntersectRays3D( std::vector< hVec3D > &starts, std::vector< hVec3D > &rays, std::vector<float> &confidences, std::vector<int> &resInliers, float thresh );
 
-
-void ReconstructSingleJoint( std::vector< Calibration > calibs, int jc0, float distanceThresh, int minNumInliers, PersonPose3D &person );
-void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelType, int jc0, int jc1, PersonPose3D &person );
-
+void ReconstructSingleJoint( std::vector< Calibration > calibs, int jc0, float minConf, float distanceThresh, int minNumInliers, PersonPose3D &person );
+void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelType, int jc0, int jc1, float minConf, leftRightDecision_t lrd, PersonPose3D &person );
+void ResolveLeftRight( 
+                       leftRightDecision_t lrd, 
+                       std::vector< hVec3D > &starts,
+                       std::vector< hVec3D > &rays,
+                       std::vector<float> &confidences,
+                       std::vector<bool> &isLeft,
+                       hVec3D a,
+                       hVec3D b,
+                       hVec3D &left, 
+                       hVec3D &right
+                     );
 class JointPairAgent : public SDS::Agent
 {
 public:

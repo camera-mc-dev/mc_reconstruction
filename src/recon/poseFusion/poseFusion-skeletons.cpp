@@ -111,7 +111,7 @@ int IsPair( int jc, skeleton_t skel )
 // 		}
 		return -1;
 	}
-	return false;
+	return -1;
 }
 
 
