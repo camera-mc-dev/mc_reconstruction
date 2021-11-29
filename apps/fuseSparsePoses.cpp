@@ -58,7 +58,10 @@ struct SData
 	// RANSAC settings for single joint reconstruction.
 	float distanceThreshold;
 	int minInliers;
+	leftRightDecision_t lrd;
 	
+	
+	float minConf;
 	
 	
 	int firstFrame;
@@ -166,9 +169,39 @@ void ParseConfig( std::string cfgFile, SData &data )
 			data.occSettings.upDir = OccupancyMap::UP_Z;
 		}
 		
-		
+		data.minConf           = cfg.lookup("minJointConfidence");
 		data.distanceThreshold = cfg.lookup("singleJointDistanceThreshold");
 		data.minInliers        = cfg.lookup("singleJointMinInliers");
+		
+		std::string lrdstr = (const char*) cfg.lookup("leftRightDecision");
+		if( lrdstr.compare("xplanepos") == 0 )
+		{
+			data.lrd = LRD_XPLANE_POS;
+		}
+		else if( lrdstr.compare("yplanepos") == 0 )
+		{
+			data.lrd = LRD_YPLANE_POS;
+		}
+		else if( lrdstr.compare("zplanepos") == 0 )
+		{
+			data.lrd = LRD_ZPLANE_POS;
+		}
+		if( lrdstr.compare("xplaneneg") == 0 )
+		{
+			data.lrd = LRD_XPLANE_NEG;
+		}
+		else if( lrdstr.compare("yplaneneg") == 0 )
+		{
+			data.lrd = LRD_YPLANE_NEG;
+		}
+		else if( lrdstr.compare("zplaneneg") == 0 )
+		{
+			data.lrd = LRD_ZPLANE_NEG;
+		}
+		else if( lrdstr.compare("votes") == 0 )
+		{
+			data.lrd = LRD_VOTE;
+		}
 		
 		
 		data.firstFrame = 0;
@@ -365,7 +398,7 @@ int main( int argc, char* argv[] )
 			//
 			// And then we use the relevant fusion method to get the 3D pose.
 			//
-			ReconstructPerson( pers3d, data.skelType, data.occSettings.calibs, data.minInliers, data.distanceThreshold );
+			ReconstructPerson( pers3d, data.skelType, data.occSettings.calibs, data.minConf, data.lrd, data.minInliers, data.distanceThreshold );
 			
 			fusedFrames[ frame ] = pers3d;
 		}

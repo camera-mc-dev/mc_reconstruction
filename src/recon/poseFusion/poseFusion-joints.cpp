@@ -149,7 +149,14 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 		++rc;
 	}
 	
-	
+	if( rays.size() < 4 )
+	{
+		cout << "need at least 4 rays for 2 point solve" << endl;
+		cout << "only got " << rays.size() << " for joints " << jc0 << " and " << jc1 << endl;
+		person.joints[jc0] << 0,0,0,0;
+		person.joints[jc1] << 0,0,0,0;
+		return;
+	}
 	
 	//
 	// Intersect all the rays - yes, left _and_ right

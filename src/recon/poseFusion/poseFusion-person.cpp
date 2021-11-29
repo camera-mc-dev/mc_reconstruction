@@ -45,7 +45,7 @@ void ReconstructPerson(
 			if( std::isnan( person.joints[jc](0) ) || std::isnan(person.joints[jc](1)) || std::isnan(person.joints[jc](2) ) )
 			{
 				cout << "damn " << jc << endl;
-				exit(0);
+				person.joints[jc] << 0,0,0,0;
 			}
 			doneJoint[jc] = true;
 		}
