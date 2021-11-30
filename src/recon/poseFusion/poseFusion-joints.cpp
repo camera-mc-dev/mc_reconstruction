@@ -179,7 +179,7 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 	
 	// make the agents.
 	std::vector< JointPairAgent* > jpagents;
-	jpagents.assign(60, NULL );
+	jpagents.assign(50, NULL );
 	std::vector< SDS::Agent* > agents( jpagents.size() );
 	for( unsigned ac = 0; ac < agents.size(); ++ac )
 	{
@@ -189,14 +189,20 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 	
 	// initialise the search.
 	int bestAgent;
-	sdsopt.InitialiseOpt(initPos, initRanges, agents, 0.1, 5000);
+	sdsopt.InitialiseOpt(initPos, initRanges, agents, 0.01, 5000);
 	
 	// loop until we have a solution.
+	int ic = 0;
 	do
 	{
 		bestAgent = sdsopt.StepOpt();
 		hVec3D pa; pa << jpagents[bestAgent]->position[0], jpagents[bestAgent]->position[1], jpagents[bestAgent]->position[2], 1.0f;
 		hVec3D pb; pb << jpagents[bestAgent]->position[3], jpagents[bestAgent]->position[4], jpagents[bestAgent]->position[5], 1.0f;
+		
+// 		jpagents[bestAgent]->debug = true;
+// 		cout << ic++ << ":" << endl;
+// 		cout << jpagents[bestAgent]->EvaluatePosition() << endl;
+// 		jpagents[bestAgent]->debug = false;
 	}
 	while( !sdsopt.CheckTerm() );
 	

@@ -16,6 +16,9 @@ void ReconstructPerson(
 	std::vector<bool> doneJoint( numJoints, false );
 	for( unsigned jc = 0; jc < numJoints; ++jc )
 	{
+// 		if( jc != 4 )
+// 			continue;
+		
 		// we might have already reconstructed this joint as part of a paired joint reconstruction.
 		if( doneJoint[jc] )
 			continue;

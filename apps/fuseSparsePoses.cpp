@@ -129,6 +129,8 @@ void ParseConfig( std::string cfgFile, SData &data )
 				iss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) imgSrcSetting[sc];
 				
 				auto sp = CreateSource( iss.str() ); // doesn't matter that the source doesn't have the calibration, we have the calibration in the occSettings anyway.
+				
+				data.imgSources.push_back( sp.source );
 			}
 		}
 		
@@ -290,6 +292,63 @@ void LoadPoses( SData &data )
 
 
 
+
+
+class FrameChangeRenderer : public Rendering::BasicRenderer
+{
+	friend class Rendering::RendererFactory;	
+	// The constructor should be private or protected so that we are forced 
+	// to use the factory...
+protected:
+	// the constructor creates the renderer with a window of the specified
+ 	// size, and with the specified title.
+	FrameChangeRenderer(unsigned width, unsigned height, std::string title) : BasicRenderer(width,height,title) {}
+public:
+	bool Step(int &camChange, bool &paused, int &frameChange )
+	{
+		Render();
+		
+		win.setActive();
+		sf::Event ev;
+		while( win.pollEvent(ev) )
+		{
+			if( ev.type == sf::Event::Closed )
+				return false;
+			
+			if (ev.type == sf::Event::KeyReleased)
+			{
+				if (ev.key.code == sf::Keyboard::Left )
+				{
+					camChange = 1;
+				}
+				if (ev.key.code == sf::Keyboard::Right )
+				{
+					camChange = -1;
+				}
+				if (ev.key.code == sf::Keyboard::Space )
+				{
+					paused = !paused;
+				}
+				if (ev.key.code == sf::Keyboard::Up )
+				{
+					frameChange = 1;
+				}
+				if (ev.key.code == sf::Keyboard::Down )
+				{
+					frameChange = -1;
+				}
+			}
+		}
+		return true;
+	}
+};
+
+
+
+
+
+
+
 int main( int argc, char* argv[] )
 {
 	if( argc != 2 )
@@ -359,7 +418,34 @@ int main( int argc, char* argv[] )
 	
 	
 	
-	
+	std::shared_ptr< FrameChangeRenderer > ren;
+	if( data.visualise )
+	{
+		assert( data.imgSources.size() == data.poseSources.size() );
+		
+		// I'm going to assume that the images from all the sources are the same size and shape.
+		cv::Mat img = data.imgSources[0]->GetCurrent();
+		
+		// how big are the images?
+		float ar = img.rows/ (float) img.cols;
+		
+		
+		// create the renderer for display purposes.
+		cout << "creating window" << endl;
+		CommonConfig ccfg;
+		float winW = ccfg.maxSingleWindowWidth;
+		float winH = winW * ar;
+		if( winH > ccfg.maxSingleWindowHeight )
+		{
+			winH = ccfg.maxSingleWindowHeight;
+			winW = winH / ar;
+		}
+		if( data.visualise )
+			Rendering::RendererFactory::Create( ren, winW, winH, "recon vis");
+		
+		ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+		ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+	}
 	
 	
 	
@@ -375,6 +461,10 @@ int main( int argc, char* argv[] )
 	//
 	// So now we have to do the real work.
 	// 
+	int camChange, frameAdvance;
+	camChange = frameAdvance = 0;
+	bool paused = true;
+	int viewCam = 0;
 	std::vector< std::map< int, PersonPose3D > > tracksFused( tracks.size() );
 	for( unsigned tc = 0; tc < tracks.size(); ++tc )
 	{
@@ -382,6 +472,8 @@ int main( int argc, char* argv[] )
 		for( auto fi = tracks[tc].begin(); fi != tracks[tc].end(); ++fi )
 		{
 			cout << tc << " " << fi->first << endl;
+			if( fi->first < data.firstFrame )
+				continue;
 			//
 			// We can initialise a PersonPose3D with links to the per-cam data.
 			//
@@ -401,6 +493,81 @@ int main( int argc, char* argv[] )
 			ReconstructPerson( pers3d, data.skelType, data.occSettings.calibs, data.minConf, data.lrd, data.minInliers, data.distanceThreshold );
 			
 			fusedFrames[ frame ] = pers3d;
+			
+			if( data.visualise )
+			{
+				if( data.imgSources[viewCam]->GetCurrentFrameID() != fi->first )
+					data.imgSources[viewCam]->JumpToFrame( fi->first );   // TODO: be more efficient
+				cv::Mat img = data.imgSources[viewCam]->GetCurrent();
+				
+				
+				// we can either make actual 3D things to render, or just project things to the image.
+				// I'm inclined to do projection right now.
+				
+				//
+				// Project the raw detections.
+				// We'll draw those as some variant of pink.
+				//
+				PersonPose pers2d = pers3d.camPers[viewCam];
+				for( unsigned jc = 0; jc < pers2d.joints.size(); ++jc )
+				{
+					hVec2D p = pers2d.joints[jc];
+					float  c = pers2d.confidences[jc];
+					
+					int b,g,r;
+					b = 256 * c;
+					g = 0;
+					r = 256 * c;
+					
+					cv::circle( img, cv::Point( p(0), p(1) ), 4, cv::Scalar( b,g,r ), 2 );
+					
+					
+				}
+				
+				
+				//
+				// Project the reconstruction.
+				//
+				// We'll do that with cyan.
+				//
+				for( unsigned jc = 0; jc < pers3d.joints.size(); ++jc )
+				{
+					hVec2D p = data.occSettings.calibs[viewCam].Project( pers3d.joints[jc] );
+					
+					int b,g,r;
+					b = 256;
+					g = 256;
+					r = 0;
+					
+					cv::circle( img, cv::Point( p(0), p(1) ), 4, cv::Scalar( b,g,r ), 2 );
+					
+					// wont hurt to draw a line from obs to recon
+					hVec2D p2 = pers2d.joints[jc];
+					cv::line( img, cv::Point( p(0), p(1) ), cv::Point( p2(0), p2(1) ), cv::Scalar( b/2, g/2, r/2 ), 2 );
+				}
+				
+				ren->SetBGImage(img);
+				
+				bool done = !ren->Step(camChange, paused, frameAdvance);
+				while( paused && frameAdvance == 0 )
+				{
+					done = !ren->Step(camChange, paused, frameAdvance);
+				}
+				if( camChange > 0 )
+				{
+					viewCam = std::min( viewCam+1, (int)data.imgSources.size()-1 );
+				}
+				if( camChange < 0 && viewCam > 0)
+				{
+					viewCam--;
+				}
+				camChange = 0;
+				frameAdvance = 0;
+				if( done )
+					exit(0);
+				data.imgSources[viewCam]->Advance();
+			}
+			
 		}
 		
 		tracksFused[tc] = fusedFrames;

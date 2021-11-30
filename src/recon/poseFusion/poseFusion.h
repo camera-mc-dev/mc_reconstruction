@@ -161,7 +161,11 @@ public:
 		{
 			cam2rc[ cams[rc] ].push_back(rc);
 		}
+		
+		debug = false;
 	}
+	
+	bool debug;
 	
 	virtual double EvaluatePosition()
 	{
@@ -209,6 +213,11 @@ public:
 			}
 		}
 		
+		if( debug )
+		{
+			cout << D << endl;
+		}
+		
 		//
 		// Compute the error.
 		//
@@ -223,7 +232,7 @@ public:
 		float e1 = 0.0f;
 		int pc, rc;
 		std::vector< std::set<int> > pc2cam(2);
-		while( D.minCoeff(&pc, &rc) < 1000 )
+		while( D.minCoeff(&pc, &rc) < 100000 )
 		{
 			// which camera is this ray from?
 			int cc = cams[rc];
@@ -236,15 +245,20 @@ public:
 				e1 += confidences[rc] * D(pc,rc);
 				
 				// make sure we can't use this ray again.
-				D(0,rc) = D(1,rc) = 1001;        
+				D(0,rc) = D(1,rc) = 100001;        
 			}
 			else
 			{
 				// yes, we have - so this ray can't be used with this point,
 				// but maybe it can be used with another point.
-				D(pc,rc) = 1001;
+				D(pc,rc) = 100001;
 				
 			}
+		}
+		
+		if( debug )
+		{
+			cout << D << endl;
 		}
 		
 // 		//
@@ -305,7 +319,28 @@ public:
 		//
 		float e2 = abs( (p0-initp).norm() - (p1-initp).norm() );
 		
-		error = e0 + e1 + e2;
+		//
+		// We can further improve the sanity by encouraging the lines p0->centre and centre->p1
+		// to be parallel, or at least, mostly in the same direction. That's basically just 
+		// a dot-product.
+		//
+		// When parallel the dot product will be 1, when perpendicular it is 0, when in opposite 
+		// directions, -1. So a 1-dotp will do the job.
+		//
+		hVec3D p0c = initp - p0;
+		hVec3D cp1 = p1 - initp;
+		p0c /= p0c.norm();
+		cp1 /= cp1.norm();
+		float e3 = 1.0 - (p0c.dot(cp1));
+		if( debug )
+		{
+			cout << initp.transpose() << endl;
+			cout << p0.transpose() << endl;
+			cout << p1.transpose() << endl;
+			cout << (p0-initp).norm() << " " << (p1-initp).norm() << endl;
+			cout << e0 << " " << e1 << " " << e2 << " " << e3 << endl;
+		}
+		error = e0 + e1 + e2 + e3;
 		return error;
 	}
 	
