@@ -1,0 +1,106 @@
+html
+{
+	background-color: #D0D0D0;
+}
+
+body
+{
+	/* margin is transparent, so we'll see the html background colour */
+    margin-top: 5px;
+    margin-bottom: 80px;
+    margin-right: auto;
+    margin-left: auto;
+
+	/* padding is not transparent, so makes a good white page margin */
+    padding-top: 50px;
+    padding-right: 50px;
+    padding-bottom: 50px;
+    padding-left: 50px;
+
+	/* set a nice reading width */
+	max-width: 500px;
+	background-color: white;
+}
+
+/* format of headings */
+h1
+{
+	color: black;
+	text-align: center;
+}
+
+h2
+{
+	color: black;
+	text-align: left;
+}
+
+
+h3
+{
+	color: black;
+	text-align: left;
+}
+
+
+/* format of paragraphs. */
+ul,ol,dl,p
+{
+	font-family: times;
+	font-size: 12px;
+	color: black;
+}
+
+/* blockquotes - used mostly for code lines */
+pre
+{
+	background: #f9f9f9;
+	font-family: monospace;
+	font-size: 12px;
+}
+
+
+
+/* hr used to mean horizontal rule, but now
+   means thematic break. This does the break that
+   I've been regularly using. */
+hr 
+{
+	font-family: times;   /* choose the font you like */
+	text-align: center;   /* horizontal centering */
+	/*font-size: 12px;      /* choose font size you like */
+	border-width: 0px 0;  /* top and bottom borders */
+}
+
+hr:after
+{
+	content: ".oOo."; /* section sign */
+	color: black;
+	display: inline;
+}
+
+/* opera doesn't render correctly. hide section sign */
+x:-o-prefocus, hr:after {
+  content: "";
+}
+
+
+code, pre {
+	word-wrap: break-word;
+	white-space: pre;
+	overflow-x: auto;
+	font-size: 0.95em;
+	line-height: 1.5;
+}
+
+/* format the images. Pandoc puts them in a <figure> tag. */
+div.figure
+{
+	width:90%;
+	height:auto;
+}
+body img
+{
+	with:100%; 
+	height:auto;
+}
