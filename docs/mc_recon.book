@@ -32,6 +32,7 @@ bk.MakeChapter( 2, "Occupancy Maps", ["chapters/occMaps.md"])
 bk.MakeChapter( 3, "Occupancy Tracker", ["chapters/occTracker.md"])
 bk.MakeChapter( 4, "Sparse Pose Tracker", ["chapters/poseTracker.md"])
 bk.MakeChapter( 5, "Sparse Pose Fusion", ["chapters/poseFusion.md"])
+bk.MakeChapter( 5, "Sparse Pose Config", ["chapters/poseConfig.md"])
 #bk.MakeChapter( 5, "Voxel Hull", ["chapters/volume.md"])
 
 

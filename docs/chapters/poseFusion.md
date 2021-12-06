@@ -83,7 +83,7 @@ We can consider many ways of resolving this, but ultimately, it is pose-dependen
 
 In the voting solve, we do a nearest-neighbour association of rays to points. As rays are labelled left or right by the detector they can now vote to give the points their final labelling. To make this more robust, we observe that labels from front and rear view cameras are more reliable than from side views. Thus we compute the dot product between the ray and the vector `p0p1` and weight the rays' votes based on the result, such that the more perpendicular the two vectors are, the stronger the vote.
 
-In the second case, we might know that the person is always facing parallel to some scene plane: e.g. always running along a track aligned with the scene y-axis. In that case we can make a reasonable inference about what is left and right based on the relative positions of the points and the specified scene plane. For instance, if the person always runs towards positive y, then we know that *right* corresponds to positive x, thus, we can determine right and left based on the x-position of `p0` and `p1`.
+In the second case, we might know that the person is always facing parallel to some scene plane: e.g. always running along a track aligned with the scene y-axis. In that case we can make a reasonable inference about what is left and right based on the relative positions of the points and the specified scene plane. For instance, if the person always runs towards positive y, then we know that *right* corresponds to positive x, thus, we can determine right and left based on the x-position of `p0` and `p1`. Obviously, this approach can only be sane on poses where the is not a significant amount of twist in the body.
 
 
 #### Future directions
@@ -91,3 +91,7 @@ In the second case, we might know that the person is always facing parallel to s
 There are a number of things we could consider doing that might improve the overall solutions. Certainly, research continues on doing the fusion/reconstruction using neural networks and learning, or employing physical models to hone in on realistic solutions. The sparse pose fusions are basically 2D solves and thus lack any real spatial awareness, so it makes sense that GANs or other models that can get some modest awareness of the manifold of human pose in 3D should be able to improve overall 3d solutions.
 
 Of course, we're left as ever with the terrible choice between modelling and measuring : use a model to *fix* the observations and you no longer get to know what it is that you are measuring - the world, or the model?
+
+
+
+
