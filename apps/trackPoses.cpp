@@ -44,7 +44,7 @@ struct SData
 	
 	std::vector< std::string > segSourceStrs;
 	std::vector< std::shared_ptr<ImageSource> > segSources;
-	segMask_t maskType;
+	segMask_t segType;
 	bool seg2Rect;
 	
 	std::vector< std::string > poseSources;
@@ -110,9 +110,8 @@ void ParseConfig( std::string cfgFile, SData &data )
 		//
 		if( cfg.exists("poseSources") )
 		{
-			assert( poseSrcSetting.getLength() == calibsSetting.getLength() );
-			
 			libconfig::Setting &poseSrcSetting = cfg.lookup("poseSources");
+			assert( poseSrcSetting.getLength() == calibsSetting.getLength() );
 			
 			data.poseSources.resize( poseSrcSetting.getLength() );
 			for( unsigned sc = 0; sc < poseSrcSetting.getLength(); ++sc )
@@ -142,9 +141,8 @@ void ParseConfig( std::string cfgFile, SData &data )
 		//
 		if( cfg.exists("segSources") )
 		{
-			assert( poseSrcSetting.getLength() == calibsSetting.getLength() );
-			
 			libconfig::Setting &segSrcSetting  = cfg.lookup("segSources");
+			assert( segSrcSetting.getLength() == calibsSetting.getLength() );
 			
 			data.poseSources.resize( segSrcSetting.getLength() );
 			for( unsigned sc = 0; sc < segSrcSetting.getLength(); ++sc )
@@ -387,7 +385,7 @@ int main( int argc, char* argv[] )
 		maxFrame = 999999999;
 		for( unsigned sc = 0; sc < data.segSources.size(); ++sc )
 		{
-			maxFrame = std::min( data.segSources[sc]->GetNumFrames, maxFrame );
+			maxFrame = std::min( data.segSources[sc]->GetNumImages(), maxFrame );
 		}
 	}
 	
@@ -450,8 +448,8 @@ int main( int argc, char* argv[] )
 			{
 				if( data.segType == SEG_DPOSE_ME )
 				{
-					masks[sc] = cv::Mat( fgbg.rows, fgbg.cols, CV_32FC1, cv::Scalar(0) );
 					cv::Mat fgbg = data.segSources[sc]->GetCurrent();
+					masks[sc] = cv::Mat( fgbg.rows, fgbg.cols, CV_32FC1, cv::Scalar(0) );
 					for( unsigned rc = 0; rc < fgbg.rows; ++rc )
 					{
 						for( unsigned cc = 0; cc < fgbg.cols; ++cc )
@@ -465,11 +463,11 @@ int main( int argc, char* argv[] )
 								auto i = minMax.find( personID );
 								if( i != minMax.end() )
 								{
-									i->first(0) = std::min( i->first(0), cc );
-									i->first(1) = std::min( i->first(1), rc );
+									i->second.first(0) = std::min( i->second.first(0), (float)cc );
+									i->second.first(1) = std::min( i->second.first(1), (float)rc );
 									
-									i->second(0) = std::max( i->second(0), cc );
-									i->second(1) = std::max( i->second(1), rc );
+									i->second.second(0) = std::max( i->second.second(0), (float)cc );
+									i->second.second(1) = std::max( i->second.second(1), (float)rc );
 								}
 								else
 								{
@@ -483,17 +481,17 @@ int main( int argc, char* argv[] )
 					for( auto pi = minMax.begin(); pi != minMax.end(); ++pi )
 					{
 						PersonPose pp;
-						pp.representativeBB.x = pipi->second->first(0);
-						pp.representativeBB.y = pipi->second->first(1);
+						pp.representativeBB.x = pi->second.first(0);
+						pp.representativeBB.y = pi->second.first(1);
 						
-						pp.representativeBB.width  = pi->second->second(0) - pi->second->first(0);
-						pp.representativeBB.height = pi->second->second(1) - pi->second->first(1);
+						pp.representativeBB.width  = pi->second.second(0) - pi->second.first(0);
+						pp.representativeBB.height = pi->second.second(1) - pi->second.first(1);
 						
 						pp.personID = pi->first;
 						
 						data.pcPoses[ sc ][ fc ].push_back( pp );
 						
-						bboxes.push_back( pp.representativeBB );
+						bboxes[sc].push_back( pp.representativeBB );
 					}
 				}
 			}
@@ -537,11 +535,11 @@ int main( int argc, char* argv[] )
 								auto i = minMax.find( personID );
 								if( i != minMax.end() )
 								{
-									i->first(0) = std::min( i->first(0), cc );
-									i->first(1) = std::min( i->first(1), rc );
+									i->second.first(0) = std::min( i->second.first(0), (float)cc );
+									i->second.first(1) = std::min( i->second.first(1), (float)rc );
 									
-									i->second(0) = std::max( i->second(0), cc );
-									i->second(1) = std::max( i->second(1), rc );
+									i->second.second(0) = std::max( i->second.second(0), (float)cc );
+									i->second.second(1) = std::max( i->second.second(1), (float)rc );
 								}
 								else
 								{
@@ -555,20 +553,20 @@ int main( int argc, char* argv[] )
 					for( auto pi = minMax.begin(); pi != minMax.end(); ++pi )
 					{
 						PersonPose pp;
-						pp.representativeBB.x = pipi->second->first(0);
-						pp.representativeBB.y = pipi->second->first(1);
+						pp.representativeBB.x = pi->second.first(0);
+						pp.representativeBB.y = pi->second.first(1);
 						
-						pp.representativeBB.width  = pi->second->second(0) - pi->second->first(0);
-						pp.representativeBB.height = pi->second->second(1) - pi->second->first(1);
+						pp.representativeBB.width  = pi->second.second(0) - pi->second.first(0);
+						pp.representativeBB.height = pi->second.second(1) - pi->second.first(1);
 						
 						pp.personID = pi->first;
 						
 						data.pcPoses[ sc ][ fc ].push_back( pp );
 						
-						bboxes.push_back( pp.representativeBB );
+						bboxes[sc].push_back( pp.representativeBB );
 					}
 				}
-				
+			}
 				
 			//
 			// Then we just compute occupancy as we always have.
@@ -585,12 +583,12 @@ int main( int argc, char* argv[] )
 			
 			for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
 			{
-				auto pf = data.pcPoses.find( fc );
-				if( pf != data.pcPoses.end() )
+				auto pf = data.pcPoses[sc].find( fc );
+				if( pf != data.pcPoses[sc].end() )
 				{
 					for( unsigned pc = 0; pc < pf->second.size(); ++pc )
 					{
-						bboxes[sc].push_back( pf->second.representativeBB );
+						bboxes[sc].push_back( pf->second[pc].representativeBB );
 					}
 				}
 			}
@@ -604,10 +602,21 @@ int main( int argc, char* argv[] )
 		cv::Mat visOcc;
 		visOcc = OT.AddFrame( fc, occ[0] );
 		
+		cv::minMaxIdx( visOcc, &m, &M );
+		
 		if( data.visualise )
 		{
 			ren->SetBGImage( visOcc );
 			ren->StepEventLoop();
+		}
+		
+		
+		if( data.segSources.size() > 0 )
+		{
+			for( unsigned sc = 0; sc < data.segSources.size(); ++sc )
+			{
+				data.segSources[sc]->Advance();
+			}
 		}
 	}
 	
@@ -749,8 +758,9 @@ int GetPersonForTrack( int frameNo, int view, cv::Rect cellBB, SData &data )
 			//
 			// Intersect detection bounding box with the cell's bounding box.
 			//
+			cv::Rect &dbb = detections[dc].representativeBB;
 			cv::Rect ibb;
-			ibb = cellBB & detections[dc].representativeBB;
+			ibb = cellBB & dbb;
 			
 			if( ibb.width > 0 )
 			{

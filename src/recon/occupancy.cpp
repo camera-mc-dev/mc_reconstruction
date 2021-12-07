@@ -170,6 +170,49 @@ void OccupancyMap::OccupancyFromPoints(
 }
 
 
+float CheckBBoxes( std::vector< cv::Rect > testBoxes, cv::Rect cellBox )
+{
+	float cba = cellBox.area();
+	float ret = 0.0f;
+	for( unsigned bc = 0; bc < testBoxes.size(); ++bc )
+	{
+		cv::Rect ibb = testBoxes[bc] & cellBox;
+		ret = std::max( ret, ibb.area() / cba );
+	}
+	return ret;
+}
+
+
+void OccupancyMap::OccupancyFromBBoxes( 
+	                                     std::vector< std::vector< cv::Rect > > &in_bboxes, 
+	                                     std::vector< cv::Mat > &maps
+	                                  )
+{
+	// ratio of the intersection bbox area to the cell's area.
+	// of course, doing it the other way might be interesting in some cases...
+	// i.e. intersection area to bbox ara
+	maps.resize( settings.obsPlanes.size() );
+	for( unsigned pc = 0; pc < settings.obsPlanes.size(); ++pc )
+	{
+		maps[pc] = cv::Mat( mapRows, mapCols, CV_32FC1, cv::Scalar(0.0f) );
+	}
+	for( unsigned bc = 0; bc < mapRows; ++bc )
+	{
+		for( unsigned ac = 0; ac < mapCols; ++ac )
+		{
+// 			#pragma omp parallel for
+			for( unsigned pc = 0; pc < settings.obsPlanes.size(); ++pc )
+			{
+				for( unsigned vc = 0; vc < settings.calibs.size(); ++vc )
+				{
+					maps[pc].at<float>(bc,ac) += CheckBBoxes( in_bboxes[vc], bboxes[bc][ac][pc][vc] );
+				}
+			}
+		}
+	}
+}
+
+
 void OccupancyMap::GetLineVisibility( std::vector<cv::Mat> &visMaps )
 {
 	visMaps = lineVisibility;

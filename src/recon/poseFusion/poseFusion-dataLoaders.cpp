@@ -92,6 +92,9 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 		return false;
 	}
 	
+// 	cout << endl << endl;
+// 	cout << fn << endl;
+	
 	// parse the data to get the joints of individual "people"
 	poses.clear();
 	cv::FileNode people = cvfs["people"];
@@ -103,7 +106,7 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 		(*it)["pose_keypoints_2d"] >> vals;
 		
 		PersonPose pp;
-		pp = personID;
+		pp.personID = personID;
 		int kpc = 0;
 		while( kpc < vals.size() )
 		{
@@ -141,6 +144,9 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 		pp.representativeConfidence = cs[ cs.size()/2 ];
 		
 		pp.representativeBB = RobustBBox( xs, ys, pp.representativePoint );
+		
+// 		cout << xs[0] << " " << ys[0] << " -> " << xs.back() << " " << ys.back() << endl;
+// 		cout << pp.representativeBB << endl;
 		
 		poses.push_back(pp);
 		
@@ -229,7 +235,7 @@ void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &po
 cv::Rect RobustBBox(
                      std::vector<float> xs,
                      std::vector<float> ys,
-                     hVec3D median
+                     hVec2D median
                    )
 {
 	// What is a robust bounding box?
@@ -251,8 +257,10 @@ cv::Rect RobustBBox(
 	// I need to worry about the rest of the algorithm first.
 	
 	cv::Rect bb;
-	bb.x = xs.begin();
-	bb.y = ys.begin();
+	bb.x = *xs.begin();
+	bb.y = *ys.begin();
 	bb.width  = (xs.back() - bb.x);
 	bb.height = (ys.back() - bb.y);
+	
+	return bb;
 }

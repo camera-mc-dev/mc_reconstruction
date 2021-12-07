@@ -111,8 +111,8 @@ void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &po
 cv::Rect RobustBBox(
                      std::vector<float> xs,
                      std::vector<float> ys,
-                     hVec3D median
-                   )  
+                     hVec2D median
+                   );
 
 
 //
