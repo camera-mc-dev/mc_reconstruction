@@ -31,6 +31,10 @@ struct PersonPose
 	
 	hVec2D representativePoint;
 	float representativeConfidence;
+	
+	cv::Rect representativeBB;
+	
+	int personID;
 };
 
 
@@ -104,7 +108,11 @@ void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::
 void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses );
 
 
-                            
+cv::Rect RobustBBox(
+                     std::vector<float> xs,
+                     std::vector<float> ys,
+                     hVec3D median
+                   )  
 
 
 //

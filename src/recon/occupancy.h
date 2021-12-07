@@ -90,6 +90,14 @@ public:
 	                           std::vector< cv::Mat > &maps
 	                        );
 	
+	// create an occupancy map by projecting cells into an image and 
+	// checking the overlap of projection and the provided bboxes.
+	// projection type is assumed to be bbox. 
+	void OccupancyFromBBoxes( 
+	                           std::vector< std::vector< cv::Rect > > &bboxes, 
+	                           std::vector< cv::Mat > &maps
+	                        );
+	
 	void GetLineVisibility( std::vector<cv::Mat> &visMaps );
 	void GetBBVisibility( std::vector<cv::Mat> &visMaps );
 	

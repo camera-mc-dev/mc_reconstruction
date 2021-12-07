@@ -96,13 +96,14 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 	poses.clear();
 	cv::FileNode people = cvfs["people"];
 	
-	
+	int personID = 0;
 	for( auto it = people.begin(); it != people.end(); ++it )
 	{
 		std::vector< float > vals;
 		(*it)["pose_keypoints_2d"] >> vals;
 		
 		PersonPose pp;
+		pp = personID;
 		int kpc = 0;
 		while( kpc < vals.size() )
 		{
@@ -119,24 +120,31 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 		// This representative point is just a robust estimate of the centre of 
 		// the person based on all the joints, and has various uses, not least of
 		// which being for disambiguating people between camera views.
-		std::vector<float> xs, ys, zs, cs;
+		std::vector<float> xs, ys, cs;
 		for( unsigned jc = 0; jc < pp.joints.size(); ++jc )
 		{
-			xs.push_back( pp.joints[jc](0) );
-			ys.push_back( pp.joints[jc](1) );
-			zs.push_back( pp.joints[jc](2) );
-			cs.push_back( pp.confidences[jc] );
+			if( pp.joints[jc].norm() > 0 ) // ignore any (0,0,0) points.
+			{
+				xs.push_back( pp.joints[jc](0) );
+				ys.push_back( pp.joints[jc](1) );
+				cs.push_back( pp.confidences[jc] );
+			}
 		}
 		
+		// and back to getting the representative point - the median gives us a robust
+		// option.
 		std::sort( xs.begin(), xs.end() );
 		std::sort( ys.begin(), ys.end() );
-		std::sort( zs.begin(), zs.end() );
 		std::sort( cs.begin(), cs.end() );
 		
-		pp.representativePoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], zs[ zs.size()/2 ];
+		pp.representativePoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], 1.0f;
 		pp.representativeConfidence = cs[ cs.size()/2 ];
 		
+		pp.representativeBB = RobustBBox( xs, ys, pp.representativePoint );
+		
 		poses.push_back(pp);
+		
+		++personID;
 	}
 	return true;
 }
@@ -175,6 +183,7 @@ void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &po
 		int numJoints = (lines[lc].size() - 1) / 3;
 		int frameNo = atoi(lines[lc][0].c_str() );
 		PersonPose p;
+		p.personID = 0;
 		p.joints.resize( numJoints );
 		p.confidences.resize( numJoints );
 		int indx = 1;
@@ -191,24 +200,59 @@ void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &po
 		// change that that one critical joint might be a fucked detection, wo we'll
 		// consolidate across the whole detection, and get a confidence across the 
 		// whole detection too.
-		std::vector<float> xs, ys, zs, cs;
+		std::vector<float> xs, ys, cs;
 		for( unsigned jc = 0; jc < p.joints.size(); ++jc )
 		{
-			xs.push_back( p.joints[jc](0) );
-			ys.push_back( p.joints[jc](1) );
-			zs.push_back( p.joints[jc](2) );
-			cs.push_back( p.confidences[jc] );
+			if( p.joints[jc].norm() > 0 ) // ignore any (0,0,0) points.
+			{
+				xs.push_back( p.joints[jc](0) );
+				ys.push_back( p.joints[jc](1) );
+				cs.push_back( p.confidences[jc] );
+			}
 		}
 		
+		// the median gives us a robust centre.
 		std::sort( xs.begin(), xs.end() );
 		std::sort( ys.begin(), ys.end() );
-		std::sort( zs.begin(), zs.end() );
 		std::sort( cs.begin(), cs.end() );
 		
-		p.representativePoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], zs[ zs.size()/2 ];
+		p.representativePoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], 1.0f;
 		p.representativeConfidence = cs[ cs.size()/2 ];
 		
+		p.representativeBB = RobustBBox( xs, ys, p.representativePoint );
 		
 		poses[ frameNo ].push_back( p );
 	}
+}
+
+
+cv::Rect RobustBBox(
+                     std::vector<float> xs,
+                     std::vector<float> ys,
+                     hVec3D median
+                   )
+{
+	// What is a robust bounding box?
+	
+	// The most basic bbox we can use is simply to 
+	// take the extremes of the xs and ys but there might be
+	// weird points in there.
+	
+	// So let us instead assume that we want a bbox that is centred
+	// on the median of the input points. At that point, what 
+	// we need to determine is how wide and tall it should be.
+	
+	// for that we need some basic heuristic about what is going 
+	// to be good for our purposes. Our aim is to use this for 
+	// cross-camera association using an OccupancyMask...
+	
+	// TODO:
+	// I'd like to do something clever here, but right now,
+	// I need to worry about the rest of the algorithm first.
+	
+	cv::Rect bb;
+	bb.x = xs.begin();
+	bb.y = ys.begin();
+	bb.width  = (xs.back() - bb.x);
+	bb.height = (ys.back() - bb.y);
 }
