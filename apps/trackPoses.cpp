@@ -3,7 +3,7 @@
 #include "commonConfig/commonConfig.h"
 
 #include "renderer2/basicRenderer.h"
-
+#include "renderer2/showImage.h"
 #include <iostream>
 using std::cout;
 using std::endl;
@@ -144,7 +144,7 @@ void ParseConfig( std::string cfgFile, SData &data )
 			libconfig::Setting &segSrcSetting  = cfg.lookup("segSources");
 			assert( segSrcSetting.getLength() == calibsSetting.getLength() );
 			
-			data.poseSources.resize( segSrcSetting.getLength() );
+			data.segSourceStrs.resize( segSrcSetting.getLength() );
 			for( unsigned sc = 0; sc < segSrcSetting.getLength(); ++sc )
 			{
 				std::stringstream sss;
@@ -328,12 +328,17 @@ int main( int argc, char* argv[] )
 			//
 			// We will assume the source string points to the root 
 			// of those two directories and we find the fgbg dir.
-			std::stringstream ss;
 			for( unsigned sc = 0; sc < data.segSourceStrs.size(); ++sc )
 			{
+				std::stringstream ss;
 				ss << data.segSourceStrs[sc] << "/fgbg/";
 				auto sp = CreateSource( ss.str() );
+				if( !sp.source )
+				{
+					throw std::runtime_error("Could not open source: " + ss.str() );
+				}
 				data.segSources[sc] = sp.source;
+				cout << ss.str() << endl;
 			}
 		}
 	}
@@ -528,8 +533,22 @@ int main( int argc, char* argv[] )
 					{
 						for( unsigned cc = 0; cc < fgbg.cols; ++cc )
 						{
-							cv::Vec3f &ip = fgbg.at< cv::Vec3f >(rc,cc);
-							int personID = ip[2];
+							int personID = -1;
+							if( fgbg.type() == CV_32FC3 )
+							{
+								cv::Vec3f &ip = fgbg.at< cv::Vec3f >(rc,cc);
+								personID = ip[2];
+							}
+							else if( fgbg.type() == CV_8UC3 )
+							{
+								cv::Vec3b &ip = fgbg.at< cv::Vec3b >(rc,cc);
+								personID = ip[2];
+							}
+							else
+							{
+								throw std::runtime_error("Wrong type for seg image!");
+							}
+							
 							if( personID > 0 )
 							{
 								auto i = minMax.find( personID );
@@ -567,7 +586,45 @@ int main( int argc, char* argv[] )
 					}
 				}
 			}
-				
+			
+// 			cout << fc << " " << bboxes.size() << endl;
+// 			for( unsigned sc = 0; sc < bboxes.size(); ++sc )
+// 			{
+// 				cout << "sc : " << sc << " " << bboxes[sc].size() << endl;
+// 				for( unsigned bc = 0; bc < bboxes[sc].size(); ++bc )
+// 				{
+// 					cout << "\t" << bboxes[sc][bc] << endl;
+// 				}
+// 			}
+// 			
+// 			for( unsigned sc = 0; sc < bboxes.size(); ++sc )
+// 			{
+// 				cv::Mat c = data.segSources[sc]->GetCurrent();
+// 				for( unsigned rc = 0; rc < c.rows; ++rc )
+// 				{
+// 					for( unsigned cc = 0; cc < c.cols; ++cc )
+// 					{
+// 						if( c.type() == CV_32FC3 )
+// 						{
+// 							c.at< cv::Vec3f >(rc,cc)[0] = 0;
+// 							c.at< cv::Vec3f >(rc,cc)[1] = 0;
+// 							c.at< cv::Vec3f >(rc,cc)[2] *= 50;
+// 						}
+// 						else if( c.type() == CV_8UC3 )
+// 						{
+// 							c.at< cv::Vec3b >(rc,cc)[0] = 0;
+// 							c.at< cv::Vec3b >(rc,cc)[1] = 0;
+// 							c.at< cv::Vec3b >(rc,cc)[2] *= 50;
+// 						}
+// 						
+// 					}
+// 				}
+// 				Rendering::ShowImage( c, 800 );
+// 			}
+// 			
+// 			cout << endl << endl;
+// 			exit(0);
+			
 			//
 			// Then we just compute occupancy as we always have.
 			//
@@ -601,8 +658,6 @@ int main( int argc, char* argv[] )
 		
 		cv::Mat visOcc;
 		visOcc = OT.AddFrame( fc, occ[0] );
-		
-		cv::minMaxIdx( visOcc, &m, &M );
 		
 		if( data.visualise )
 		{
