@@ -459,10 +459,25 @@ int main( int argc, char* argv[] )
 					{
 						for( unsigned cc = 0; cc < fgbg.cols; ++cc )
 						{
-							cv::Vec3f &ip = fgbg.at< cv::Vec3f >(rc,cc);
-							masks[sc].at<float>(rc,cc) = std::max(0.0f, ip[1] - ip[0]);
+							int personID = 0;
+							if( fgbg.type() == CV_32FC3 )
+							{
+								cv::Vec3f &ip = fgbg.at< cv::Vec3f >(rc,cc);
+								masks[sc].at<float>(rc,cc) = std::max(0.0f, ip[1] - ip[0]);
+								personID = ip[2];
+							}
+							else if( fgbg.type() == CV_8UC3 )
+							{
+								cv::Vec3b &ip = fgbg.at< cv::Vec3b >(rc,cc);
+								masks[sc].at<float>(rc,cc) = std::max(0.0f, (ip[1] - ip[0])/255.0f);
+								personID = ip[2];
+							}
+							else
+							{
+								throw std::runtime_error("Wrong type for seg image!");
+							}
 							
-							int personID = ip[2];
+							
 							if( personID > 0 )
 							{
 								auto i = minMax.find( personID );
