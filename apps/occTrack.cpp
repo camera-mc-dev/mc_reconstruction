@@ -220,6 +220,21 @@ int main(int argc, char *argv[] )
 		cout << "add frame..." << endl;
 		visOcc = OT.AddFrame( fc, occ[0] );
 		
+		visOcc = cv::Mat( visOcc.rows, visOcc.cols, CV_32FC3, cv::Scalar(0,0,0) );
+		for( unsigned rc = 0; rc < visOcc.rows; ++rc )
+		{
+			for( unsigned cc = 0; cc < visOcc.cols; ++cc )
+			{
+				cv::Vec3f &vp = visOcc.at< cv::Vec3f >(rc,cc);
+				float &v = visMaps[0].at< float >(rc,cc);
+				float &o = occ[0].at<float>(rc,cc);
+				
+				vp[0] = v / (float)data.maskSources.size();
+				vp[1] = o / v;
+				
+			}
+		}
+		
 		ren->SetBGImage(visOcc);
 		
 		ren->Step(paused, advance);
