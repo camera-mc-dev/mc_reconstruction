@@ -422,6 +422,7 @@ int main( int argc, char* argv[] )
 		ren->Get2dBgCamera()->SetOrthoProjection( 0, mapCols, 0, mapRows, -10, 10 );
 	}
 	
+	
 	std::vector< cv::Mat > occ;
 	for( unsigned fc = minFrame; fc < maxFrame; ++fc )
 	{
@@ -451,6 +452,7 @@ int main( int argc, char* argv[] )
 			std::vector< cv::Mat > masks( data.segSources.size() );
 			for( unsigned sc = 0; sc < data.segSources.size(); ++sc )
 			{
+				minMax.clear();
 				if( data.segType == SEG_DPOSE_ME )
 				{
 					cv::Mat fgbg = data.segSources[sc]->GetCurrent();
@@ -459,7 +461,7 @@ int main( int argc, char* argv[] )
 					{
 						for( unsigned cc = 0; cc < fgbg.cols; ++cc )
 						{
-							int personID = 0;
+							int personID = -1;
 							if( fgbg.type() == CV_32FC3 )
 							{
 								cv::Vec3f &ip = fgbg.at< cv::Vec3f >(rc,cc);
@@ -497,6 +499,7 @@ int main( int argc, char* argv[] )
 							}
 						}
 					}
+					
 					
 					for( auto pi = minMax.begin(); pi != minMax.end(); ++pi )
 					{
@@ -541,6 +544,7 @@ int main( int argc, char* argv[] )
 			std::map< int, std::pair< hVec2D, hVec2D > > minMax;
 			for( unsigned sc = 0; sc < data.segSources.size(); ++sc )
 			{
+				minMax.clear();
 				if( data.segType == SEG_DPOSE_ME )
 				{
 					cv::Mat fgbg = data.segSources[sc]->GetCurrent();
@@ -805,6 +809,7 @@ int main( int argc, char* argv[] )
 		}
 	}
 	
+	cout << "done" << endl;
 }
 
 
@@ -816,7 +821,7 @@ int GetPersonForTrack( int frameNo, int view, cv::Rect cellBB, SData &data )
 	
 	// get the frame...
 	auto fi = data.pcPoses[view].find( frameNo );
-	
+	std::ofstream assfi("assfile", std::ofstream::app );
 	if( fi != data.pcPoses[view].end() && fi->second.size() > 0 )
 	{
 		std::vector< PersonPose > &detections = fi->second;
@@ -852,7 +857,11 @@ int GetPersonForTrack( int frameNo, int view, cv::Rect cellBB, SData &data )
 					bestVal = hRat;
 					bestDet = dc;
 				}
+				
+				assfi << "\tass: " << frameNo << " " << view << " : " << dbb << " : " << cellBB << " : " << ibb << " : " << hRat << endl;
 			}
+			
+			
 		}
 		
 		return bestDet;
