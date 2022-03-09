@@ -864,7 +864,7 @@ int GetPersonForTrack( int frameNo, int view, cv::Rect cellBB, SData &data )
 			
 		}
 		
-		return bestDet;
+		return detections[ bestDet ].personID;
 	}
 	else
 	{
