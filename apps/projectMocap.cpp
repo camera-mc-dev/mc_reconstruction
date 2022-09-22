@@ -11,6 +11,7 @@
 #include "renderer2/showImage.h"
 
 #include "misc/c3d.h"
+#include "misc/tokeniser.h"
 
 #include <map>
 #include <iostream>
@@ -22,6 +23,9 @@ using std::endl;
 #include "libconfig.h++"
 
 #include "commonConfig/commonConfig.h"
+
+// only a total idiot would accidentally use this as the name of the events file.
+#define NO_EVENT_FILE "-$noEvents$-"
 
 
 struct SData
@@ -38,18 +42,30 @@ struct SData
 	std::map<std::string,ImageSource*> sources;
 	std::map<std::string,unsigned> camKey2Indx;
 	
+	std::string eventsFile;
+	std::map< int, std::vector< std::string > > events;
+	
 	
 	std::vector< std::string > trackFiles;
 	std::vector<unsigned> trackStartFrames;
 	std::map< std::string, genMatrix > tracks;
+	genMatrix channels;
+	
+	// render nodes.
+	std::shared_ptr< Rendering::MeshNode > imgNode;
+	std::shared_ptr< Rendering::SceneNode > tlRoot;
+	std::shared_ptr< Rendering::MeshNode > momentNode;
+	std::shared_ptr< Rendering::MeshNode > hmNode;
+	std::map< int, std::shared_ptr< Rendering::SceneNode > > eventNodes;
+	std::shared_ptr< Rendering::SceneNode > txtRoot;
+	Rendering::SDFText *textMaker;
+	
+	cv::Mat channelsHeatmap;
 	
 	bool visualise;
 	
 };
 
-
-void ParseConfig( std::string configFile, SData &data );
-void GetSources( SData &data );
 
 class AlignRenderer : public Rendering::BasicRenderer
 {
@@ -100,6 +116,11 @@ public:
 	}
 };
 
+void ParseConfig( std::string configFile, SData &data );
+void GetSources( SData &data );
+void ReadEvents( SData &data );
+void CreateNodes( std::shared_ptr< AlignRenderer> ren, SData &data, int winW, int winH, int timeLineWidth, int numVidFrames );
+
 int main(int argc, char* argv[])
 {
 	if( argc != 2 )
@@ -113,6 +134,7 @@ int main(int argc, char* argv[])
 	SData data;
 	ParseConfig( argv[1], data );
 	GetSources( data );
+	ReadEvents( data );
 	
 	//
 	// Create renderer
@@ -128,14 +150,13 @@ int main(int argc, char* argv[])
 	cout << "creating window" << endl;
 	std::shared_ptr<AlignRenderer> ren;
 	float winW = ccfg.maxSingleWindowWidth;
-	float winH = winW * ar;
+	float timeLineWidth = 100;
+	float winH = (winW - timeLineWidth) * ar;
 	if( winH > ccfg.maxSingleWindowHeight )
 	{
 		winH = ccfg.maxSingleWindowHeight;
 		winW = winH / ar;
 	}
-	if( data.visualise )
-		Rendering::RendererFactory::Create( ren, winW, winH, "mocap vis");
 	
 	//
 	// Load the c3d track files.
@@ -145,7 +166,8 @@ int main(int argc, char* argv[])
 	{
 		cout << "loading: " << data.trackFiles[tfc] << endl;
 		std::map< std::string, genMatrix > newTracks;
-		LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
+		genMatrix newChannels;
+		LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks, newChannels );
 		cout << "\tnew tracks: " << newTracks.size() << endl;
 		cout << "\tstart Frame: " << data.trackStartFrames[tfc] << endl;
 		for( auto ti = newTracks.begin(); ti != newTracks.end(); ++ti )
@@ -169,6 +191,21 @@ int main(int argc, char* argv[])
 				exit(0);
 			}
 		}
+		
+		if( data.channels.cols() > 0 && data.channels.cols() != newChannels.cols() )
+		{
+			cout << "ignoring channels from file: " << data.trackFiles[tfc] << " because it has different frames from previous channels data " << endl;
+			cout << newChannels.cols() << " vs: " << data.channels.cols() << endl;
+		}
+		else if( data.channels.cols() > 0 )
+		{
+			genMatrix tmp( data.channels.rows() + newChannels.rows(), data.channels.cols() );
+			tmp << data.channels, newChannels;
+			
+			data.channels = tmp;
+		}
+		else
+			data.channels = newChannels;
 	}
 	
 	cout << "track names: " << endl;
@@ -180,6 +217,38 @@ int main(int argc, char* argv[])
 	}
 	cout << "min elements: " << minElements << endl;
 	
+	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << endl;
+	
+	// let's turn the channels data into a simple heatmap.
+	// I want there to be as many rows of this image as there are _video_ frames, except multiplied by
+	// the fact that we have 1000 Hz instead of 200 Hz
+	// TODO: Handle when it is not 200 Hz and 1000 Hz
+	// 
+	int numHMRows = data.sources.begin()->second->GetNumImages() * 5;
+	cout << numHMRows << " " << data.sources.begin()->second->GetNumImages() << " " << data.channels.cols() << endl;
+	cv::Mat hmch( numHMRows, data.channels.rows(), CV_32FC3, cv::Scalar(0) );
+	data.channels /= data.channels.maxCoeff();
+	for( unsigned rc = 0; rc < std::min(hmch.rows, (int)data.channels.cols()); ++rc )
+	{
+		for( unsigned cc = 0; cc < hmch.cols; ++cc )
+		{
+			float x = data.channels(cc,rc);
+			cv::Vec3f &p = hmch.at<cv::Vec3f>(rc,cc);
+			
+			p[2] = 1 - (0.5 + 0.5 * cos(  x   * 3.14) );
+			p[1] = 1 - (0.5 + 0.5 * cos(  x   * 6.28) );
+			p[0] = 1 - (0.5 + 0.5 * cos((x+1) * 3.14) );
+		}
+	}
+	data.channelsHeatmap = hmch;
+	
+	
+	
+	if( data.visualise )
+	{
+		Rendering::RendererFactory::Create( ren, winW, winH, "mocap vis");
+		CreateNodes( ren, data, winW, winH, timeLineWidth, data.sources.begin()->second->GetNumImages() );
+	}
 	
 	bool done = false;
 	std::map< int, std::string > ind2id;
@@ -251,13 +320,11 @@ int main(int argc, char* argv[])
 		
 		Calibration &calib = data.sources[ ind2id[cind] ]->GetCalibration();
 		
+		
+		
 		if( data.visualise )
 		{
 			img = data.sources[ ind2id[cind] ]->GetCurrent().clone();
-			
-			ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
-			ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
-			
 			
 			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
 			{
@@ -275,11 +342,53 @@ int main(int argc, char* argv[])
 				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), cv::Scalar(255,  0,   0), 2);
 				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
 				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
+				
 			}
-		
-		
-		
-			ren->SetBGImage(img);
+			
+			data.imgNode->GetTexture()->UploadImage( img );
+			transMatrix3D T;
+			T = transMatrix3D::Identity();
+			T(1,3) =  (float)vfc / data.sources[ ind2id[cind] ]->GetNumImages() * winH;
+			data.momentNode->SetTransformation(T);
+			
+			auto ei = data.events.find( mfc );
+			if( ei != data.events.end() )
+			{
+				cout << "====================" << endl;
+				cout << " events: ";
+				for( unsigned c = 0; c < ei->second.size(); ++c )
+				{
+					cout << ei->second[c] << " ";
+				}
+				cout << endl;
+				cout << "====================" << endl;
+			}
+			
+			for( auto eni = data.eventNodes.begin(); eni != data.eventNodes.end(); ++eni )
+			{
+				std::stringstream ss;
+				ss << eni->second->GetID() << "-line";
+				std::shared_ptr< Rendering::MeshNode > li = std::dynamic_pointer_cast<Rendering::MeshNode>( eni->second->FindChild( ss.str() ) );
+				
+				if( vfc == eni->first )
+				{
+					Eigen::Vector4f g; g << 0.0f, 1.0f, 0.0f, 1.0f;
+					li->SetBaseColour( g );
+					
+					data.txtRoot->Clean();
+					hVec2D txtPos; txtPos << winW - timeLineWidth - winH/100 * 8, (float)vfc / data.sources.begin()->second->GetNumImages() * winH, 1.0f;
+					Eigen::Vector4f tcol; tcol << 1.0, 1.0, 1.0, 1.0f;
+					data.textMaker->RenderString( data.events[eni->first][0], winH/30, txtPos, tcol, data.txtRoot );
+				}
+				else if( vfc > eni->first )
+				{
+					Eigen::Vector4f b; b << 0.0f, 0.0f, 1.0f, 1.0f;
+					li->SetBaseColour( b );
+				}
+			}
+			
+			
+			
 			
 			frameAdvance = 0;
 			done = !ren->Step(camChange, paused, frameAdvance);
@@ -300,6 +409,12 @@ int main(int argc, char* argv[])
 					--cind;
 				camChange = 0;
 			}
+			
+// 			std::stringstream gss;
+// 			gss << "projGrab/" << std::setw(6) << std::setfill('0') << vfc << ".jpg";
+// 			cv::Mat grab = ren->Capture();
+// 			SaveImage( grab, gss.str() );
+			
 		}
 		
 		if( mfc >= 0 && mfc <  data.tracks.begin()->second.cols() )
@@ -402,6 +517,17 @@ void ParseConfig( std::string configFile, SData &data )
 			data.trackFiles.push_back( ss.str() );
 		}
 		
+		if( cfg.exists("eventsFile") )
+		{
+			std::stringstream ss;
+			ss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) cfg.lookup("eventsFile");;
+			data.eventsFile = ss.str();
+		}
+		else
+		{
+			data.eventsFile = NO_EVENT_FILE;
+		}
+		
 		if( cfg.exists("visualise") )
 		{
 			data.visualise = cfg.lookup("visualise");
@@ -467,4 +593,126 @@ void GetSources( SData &data )
 		cout << "no data.imgDirs nor data.vidFiles." << endl;
 		exit(0);
 	}
+}
+
+
+void ReadEvents( SData &data )
+{
+	// we will assume the events file has entries in _frames_ not in _times_
+	// This is a strange and horrid file format, but, what ho!
+	if( data.eventsFile.compare( NO_EVENT_FILE ) != 0 )
+	{
+		std::ifstream infi( data.eventsFile );
+		if( !infi )
+		{
+			std::stringstream ss;
+			ss << "Couldn't open events file: " << data.eventsFile << endl;
+			throw std::runtime_error( ss.str() );
+		}
+		
+		std::vector< std::vector< std::string > > lineTokens;
+		std::string line;
+		while( std::getline(infi, line) )
+		{
+			lineTokens.push_back( SplitLine( line, " " ) );
+		}
+		
+		// I think we should have 4 + 1 lines of column headers, and then the rest are data rows.
+		assert( lineTokens.size() >= 5 );
+		
+		// parse each data row.
+		for( unsigned lc = 5; lc < lineTokens.size(); ++lc )
+		{
+			// don't need the item number in the first column.
+			for( unsigned sc = 1; sc < lineTokens[lc].size(); ++sc )
+			{
+				// data rows should have the "item" column which header rows don't have.
+				assert( lineTokens[lc].size() == lineTokens[1].size() + 1 );
+				
+				// column name?
+				std::string columnName = lineTokens[1][sc-1];
+				
+				// column value?
+				std::string valStr = lineTokens[lc][sc];
+				if( valStr.compare("NaN") != 0 )
+				{
+					int frame = std::atof( valStr.c_str() );
+					
+					data.events[ frame ].push_back( columnName );
+					
+					cout << "got event: " << frame << " " << columnName << endl;
+				}
+			}
+		}
+	}
+}
+
+void CreateNodes( std::shared_ptr< AlignRenderer > ren, SData &data, int winW, int winH, int timeLineWidth, int numVidFrames )
+{
+	data.imgNode = Rendering::GenerateImageNode(0, 0, winW - timeLineWidth, winH, "imgNode", ren );
+	ren->Get2dBgRoot()->AddChild( data.imgNode );
+	
+	ren->Get2dBgCamera()->SetOrthoProjection(0, winW, 0, winH, -10, 10);
+	ren->Get2dFgCamera()->SetOrthoProjection(0, winW, 0, winH, -10, 10);
+	
+	// timeline root is just an offset to the side of our window.
+	Rendering::NodeFactory::Create(data.tlRoot, "timelineRoot");
+	transMatrix3D T = transMatrix3D::Identity();
+	T(0,3) = winW - timeLineWidth;
+	data.tlRoot->SetTransformation(T);
+	
+	// then for each event, we want some mark on the timeline.
+	for( auto ei = data.events.begin(); ei != data.events.end(); ++ei )
+	{
+		std::stringstream ss;
+		ss << "enode-" << ei->first;
+		Rendering::NodeFactory::Create(data.eventNodes[ ei->first ], ss.str());
+		
+// 		// make a text label ? No... makes it too busy on the screen
+// 		for( unsigned c = 0; c < ei->second.size(); ++c )
+// 		{
+// 			
+// 		}
+		
+		// make a line.
+		ss << "-line";
+		std::vector< Eigen::Vector2f > pts(2);
+		float h = (float)ei->first / (float) numVidFrames * winH; // TODO: change 2000 to number of frames in video.
+		pts[0] << 0, h;
+		pts[1] << timeLineWidth, h;
+		auto n = Rendering::GenerateLineNode2D( pts, 2, ss.str(), ren );
+		data.eventNodes[ ei->first ]->AddChild(n);
+		
+		Eigen::Vector4f red; red << 1.0f, 0.0f, 0.0f, 1.0f;
+		n->SetBaseColour( red );
+		
+		data.tlRoot->AddChild( data.eventNodes[ ei->first ] );
+	}
+	
+	// then our progress through the timeline.
+	hVec3D centre;
+	centre << winW - timeLineWidth/2.0, -(0.5*winH), -5.0f, 1.0f;
+	data.momentNode = GenerateRectNode(centre, timeLineWidth, winH, 0.1, "momentNode", ren);
+	
+	Eigen::Vector4f progCol; progCol << 0.4f, 0.8f, 0.8f, 0.6f;
+	data.momentNode->SetBaseColour(progCol);
+	ren->Get2dBgRoot()->AddChild( data.momentNode );
+	
+	ren->Get2dFgRoot()->AddChild( data.tlRoot );
+	
+	// and a node for the event name
+	Rendering::NodeFactory::Create(data.txtRoot, "txtRoot");
+	ren->Get2dFgRoot()->AddChild( data.txtRoot );
+	
+	// and something to write with
+	CommonConfig ccfg;
+	std::stringstream fntss;
+	fntss << ccfg.coreDataRoot << "/NotoMono-Regular.ttf";
+	data.textMaker = new Rendering::SDFText (fntss.str(), ren);
+	
+	// some way of showing the signals from the analog channels.
+	data.hmNode = Rendering::GenerateImageNode(winW-timeLineWidth, 0, timeLineWidth, winH, data.channelsHeatmap, "hmNode", ren );
+	ren->Get2dBgRoot()->AddChild( data.hmNode );
+	
+// 	std::vector< std::shared_ptr< Rendering::MeshNode > > eventNodes;
 }

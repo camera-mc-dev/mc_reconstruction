@@ -483,7 +483,18 @@ int main( int argc, char* argv[] )
 			{
 				int cam = fi->second[ac].first;
 				int pindx = fi->second[ac].second;
-				pers3d.camPers[ cam ] = data.pcPoses[ cam ][ frame ][ pindx ];
+				auto pi = data.pcPoses[cam].find(frame);
+				if( pi != data.pcPoses[cam].end() )
+				{
+					if( pindx < pi->second.size() )
+					{
+						pers3d.camPers[ cam ] = pi->second[pindx];
+					}
+					else
+					{
+						cout << "Does that make any sense?" << endl;
+					}
+				}
 			}
 			
 			

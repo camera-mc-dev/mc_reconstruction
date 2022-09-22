@@ -393,6 +393,7 @@ int main( int argc, char* argv[] )
 			maxFrame = std::min( data.segSources[sc]->GetNumImages(), maxFrame );
 		}
 	}
+	minFrame = std::max( minFrame, data.firstFrame );
 	
 	cout << minFrame << " -> " << maxFrame << endl;
 	
@@ -420,6 +421,15 @@ int main( int argc, char* argv[] )
 		
 		Rendering::RendererFactory::Create( ren, renW, renH, "tst" );
 		ren->Get2dBgCamera()->SetOrthoProjection( 0, mapCols, 0, mapRows, -10, 10 );
+	}
+	
+	
+	if( data.segSources.size() > 0 )
+	{
+		for( unsigned sc = 0; sc < data.segSources.size(); ++sc )
+		{
+			data.segSources[sc]->JumpToFrame(minFrame);
+		}
 	}
 	
 	

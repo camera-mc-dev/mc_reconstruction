@@ -13,6 +13,12 @@ using std::endl;
 
 void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::string, genMatrix > &points )
 {
+	genMatrix channels;
+	LoadC3DFile( filename, startFrame, points, channels );
+}
+
+void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::string, genMatrix > &points, genMatrix &channels )
+{
 	ezc3d::c3d c3d( filename );
 	
 	// c3d has 3 main accessors:
@@ -32,11 +38,12 @@ void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::str
 	// 3D point.
 	auto names = c3d.pointNames();
 	
-	// There are channels as well, but I am ignoring those for now as
-	// I don't think they match my uses.
+	// There are channels as well, which might contain analog signals.
 	auto cnames = c3d.channelNames();
 	
-	cout << "\t\tc3d reader: names: " << names.size() << "  cnames: " << cnames.size() << endl;
+	int numAnalogs = c3d.header().nbAnalogs();
+	
+	cout << "\t\tc3d reader: names: " << names.size() << "  cnames: " << cnames.size() << " numAnalogs: " << numAnalogs << endl;
 	cout << "\t\t            names: ";
 	for( unsigned nc = 0; nc < names.size(); ++nc )
 	{
@@ -56,6 +63,7 @@ void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::str
 	//
 	unsigned numFrames  = c3d.header().nbFrames();
 	unsigned firstFrame = c3d.header().firstFrame();
+	cout << "\t\t            nframes, fframe: " << numFrames << " " << firstFrame << endl;
 	
 	//
 	// Which means we can create an empty points matrix
@@ -68,6 +76,13 @@ void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::str
 	{
 		points[ names[nc] ] = genMatrix::Zero(6, numFrames + firstFrame);
 	}
+	
+	// I'd like to think that we could now make much the same structure for the 
+	// analog data - but we might find that this is not general enough for all circumstances.
+	unsigned analogSubframes = c3d.header().nbAnalogByFrame();
+	unsigned numAnalogFrames = (numFrames + firstFrame) * analogSubframes;
+	channels = genMatrix::Zero( cnames.size(), numAnalogFrames);
+	
 	
 	//
 	// So we can now access each of the frames and fill
@@ -91,6 +106,17 @@ void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::str
 				points[ names[nc] ].col(fc + firstFrame) << p(0), p(1), p(2), p(3),  r, 1.0f;
 			else
 				points[ names[nc] ].col(fc + firstFrame) << p(0), p(1), p(2), p(3),  r, 0.0f;
+		}
+		
+		for( unsigned nc = 0; nc < cnames.size(); ++nc )
+		{
+			for( unsigned sfc = 0; sfc < analogSubframes; ++sfc )
+			{
+				// NOTE: I should probably do more checks to make sure that this frame has the number of subframes 
+				//       that we are expecting.
+				int idx = (firstFrame*analogSubframes) + (fc*analogSubframes) + sfc;
+				channels(nc, idx) = c3d.data().frame(fc).analogs().subframe(sfc).channel(nc).data();
+			}
 		}
 	}
 	

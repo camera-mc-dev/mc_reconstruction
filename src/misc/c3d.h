@@ -6,6 +6,7 @@
 #include "math/mathTypes.h"
 
 void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::string, genMatrix > &points );
+void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::string, genMatrix > &points, genMatrix &channels );
 
 
 
