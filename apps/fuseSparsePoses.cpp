@@ -654,46 +654,46 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 		std::map<int, std::string> pointNames;
 		if( data.skelType == SKEL_OPOSE )
 		{
-			pointNames[17] = "rEar";       pointNames[18] = "lEar";
-			  pointNames[15] = "rEye";  pointNames[16] = "lEye";
-			               pointNames[0] = "nose";
-			               pointNames[1] = "neck";
-			pointNames[2] = "rShoulder";   pointNames[5] = "lShoulder";
-			pointNames[3] = "rElbow";      pointNames[6] = "lElbow";
-			pointNames[4] = "rWrist";      pointNames[7] = "lWrist";
-			               pointNames[8] = "midHip";
-			pointNames[9] = "rHip";        pointNames[12] = "lHip";
-			pointNames[10] = "rKnee";      pointNames[13] = "lKnee";
-			pointNames[11] = "rAnkle";     pointNames[14] = "lAnkle";
-			pointNames[24] = "rHeel";      pointNames[21] = "lHeel";
-			pointNames[22] = "rBToe";      pointNames[19] = "lBToe";
-			pointNames[23] = "rLToe";      pointNames[20] = "lLToe";
+			pointNames[17] = "RIGHT_EAR";       pointNames[18] = "LEFT_EAR";
+			  pointNames[15] = "RIGHT_EYE";  pointNames[16] = "LEFT_EYE";
+			               pointNames[0] = "NOSE";
+			               pointNames[1] = "NECK";
+			pointNames[2] = "RIGHT_SHO";        pointNames[5] = "LEFT_SHO";
+			pointNames[3] = "RIGHT_ELBOW";      pointNames[6] = "LEFT_ELBOW";
+			pointNames[4] = "RIGHT_WRIST";      pointNames[7] = "LEFT_WRIST";
+			               pointNames[8] = "MIDHIP";
+			pointNames[9] = "RIGHT_HIP";        pointNames[12] = "LEFT_HIP";
+			pointNames[10] = "RIGHT_KNEE";      pointNames[13] = "LEFT_KNEE";
+			pointNames[11] = "RIGHT_ANKLE";     pointNames[14] = "LEFT_ANKLE";
+			pointNames[24] = "RIGHT_HEEL";      pointNames[21] = "LEFT_HEEL";
+			pointNames[22] = "RIGHT_MTP1";      pointNames[19] = "LEFT_MTP1";
+			pointNames[23] = "RIGHT_MTP5";      pointNames[20] = "LEFT_MTP5";
 		}
 		else if( data.skelType == SKEL_APOSE )
 		{
-			pointNames[16] = "rEar";       pointNames[17] = "lEar";
-			  pointNames[14] = "rEye";  pointNames[15] = "lEye";
-			               pointNames[0] = "nose";
-			               pointNames[1] = "neck";
-			pointNames[2] = "rShoulder";   pointNames[5] = "lShoulder";
-			pointNames[3] = "rElbow";      pointNames[6] = "lElbow";
-			pointNames[4] = "rWrist";      pointNames[7] = "lWrist";
+			pointNames[16] = "RIGHT_EAR";       pointNames[17] = "LEFT_EAR";
+			  pointNames[14] = "RIGHT_EYE";  pointNames[15] = "LEFT_EYE";
+			               pointNames[0] = "NOSE";
+			               pointNames[1] = "NECK";
+			pointNames[2] = "RIGHT_SHO";        pointNames[5] = "LEFT_SHO";
+			pointNames[3] = "RIGHT_ELBOW";      pointNames[6] = "LEFT_ELBOW";
+			pointNames[4] = "RIGHT_WRIST";      pointNames[7] = "LEFT_WRIST";
 
-			pointNames[8] = "rHip";        pointNames[11] = "lHip";
-			pointNames[9] = "rKnee";       pointNames[12] = "lKnee";
-			pointNames[10] = "rAnkle";     pointNames[13] = "lAnkle";
+			pointNames[8] = "RIGHT_HIP";        pointNames[11] = "LEFT_HIP";
+			pointNames[9] = "RIGHT_KNEE";       pointNames[12] = "LEFT_KNEE";
+			pointNames[10] = "RIGHT_ANKLE";     pointNames[13] = "LEFT_ANKLE";
 		}
 		else if( data.skelType == SKEL_DLCUT )
 		{
-			               pointNames[13] = "forehead";
-			               pointNames[12] = "chin";
-			pointNames[8] = "rShoulder";   pointNames[9]  = "lShoulder";
-			pointNames[7] = "rElbow";      pointNames[10] = "lElbow";
-			pointNames[6] = "rWrist";      pointNames[11] = "lWrist";
+			               pointNames[13] = "FOREHEAD";
+			               pointNames[12] = "CHIN";
+			pointNames[8] = "RIGHT_SHO";        pointNames[9]  = "LEFT_SHO";
+			pointNames[7] = "RIGHT_ELBOW";      pointNames[10] = "LEFT_ELBOW";
+			pointNames[6] = "RIGHT_WRIST";      pointNames[11] = "LEFT_WRIST";
 
-			pointNames[2] = "rHip";        pointNames[3]  = "lHip";
-			pointNames[1] = "rKnee";       pointNames[4]  = "lKnee";
-			pointNames[0] = "rAnkle";      pointNames[5]  = "lAnkle";
+			pointNames[2] = "RIGHT_HIP";        pointNames[3]  = "LEFT_HIP";
+			pointNames[1] = "RIGHT_KNEE";       pointNames[4]  = "LEFT_KNEE";
+			pointNames[0] = "RIGHT_ANKLE";      pointNames[5]  = "LEFT_ANKLE";
 		}
 		
 		for( auto pi = pointNames.begin(); pi != pointNames.end(); ++pi )
@@ -757,11 +757,14 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 				ezc3d::DataNS::Points3dNS::Points pts;
 				for( unsigned pc = 0; pc < pointNames.size(); ++pc )
 				{
+					// NOTE: I would rather the residual was set to -1 here to indicate error, but setting to
+					//       0 appears to work better in so far as our mc_opensim tools don't work when we 
+					//       have -1 (and if we use -1 then we get lots of NANs when we load the file later)
 					ezc3d::DataNS::Points3dNS::Point pt;
 					pt.x( 0.0f );
 					pt.y( 0.0f );
 					pt.z( 0.0f );
-					pt.residual(-1.0f);
+					pt.residual(0.0f);
 					
 					pts.point(pt, name2idx[ pointNames[pc] ] );
 				}
@@ -769,7 +772,7 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 				ezc3d::DataNS::Frame f;
 				f.add(pts);
 				c3d.frame(f);
-				cout << fc << " " << fc2 << " empty " << endl;
+				cout << fc << " " << fc2 << " " << pts.nbPoints() << " empty " << endl;
 				++fc;
 			}
 			else
@@ -787,7 +790,7 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 						pt.x( ji->second(0) );
 						pt.y( ji->second(1) );
 						pt.z( ji->second(2) );
-						pt.residual(1.0f);
+						pt.residual(ji->second(3));
 					}
 					else
 					{

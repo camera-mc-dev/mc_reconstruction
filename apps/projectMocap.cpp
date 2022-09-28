@@ -174,11 +174,11 @@ int main(int argc, char* argv[])
 		{
 			
 			std::string name = ti->first;
-			if( data.trackFiles[tfc].find("op-fused") != std::string::npos )
+			if( data.trackFiles[tfc].find("op-") != std::string::npos )
 				name = "op-" + name;
-			if( data.trackFiles[tfc].find("ap-fused") != std::string::npos )
+			if( data.trackFiles[tfc].find("ap-") != std::string::npos )
 				name = "ap-" + name;
-			if( data.trackFiles[tfc].find("dlc-fused") != std::string::npos )
+			if( data.trackFiles[tfc].find("dlc-") != std::string::npos )
 				name = "dlc-" + name;
 			cout << "\t" << ti->first << " ( " << name << " ) " << endl;
 			if( data.tracks.find( name ) == data.tracks.end() )
@@ -218,29 +218,35 @@ int main(int argc, char* argv[])
 	cout << "min elements: " << minElements << endl;
 	
 	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << endl;
-	
-	// let's turn the channels data into a simple heatmap.
-	// I want there to be as many rows of this image as there are _video_ frames, except multiplied by
-	// the fact that we have 1000 Hz instead of 200 Hz
-	// TODO: Handle when it is not 200 Hz and 1000 Hz
-	// 
-	int numHMRows = data.sources.begin()->second->GetNumImages() * 5;
-	cout << numHMRows << " " << data.sources.begin()->second->GetNumImages() << " " << data.channels.cols() << endl;
-	cv::Mat hmch( numHMRows, data.channels.rows(), CV_32FC3, cv::Scalar(0) );
-	data.channels /= data.channels.maxCoeff();
-	for( unsigned rc = 0; rc < std::min(hmch.rows, (int)data.channels.cols()); ++rc )
-	{
-		for( unsigned cc = 0; cc < hmch.cols; ++cc )
+	if( data.channels.rows() > 0 && data.channels.cols() < 0 )
+    {
+		// let's turn the channels data into a simple heatmap.
+		// I want there to be as many rows of this image as there are _video_ frames, except multiplied by
+		// the fact that we have 1000 Hz instead of 200 Hz
+		// TODO: Handle when it is not 200 Hz and 1000 Hz
+		// 
+		int numHMRows = data.sources.begin()->second->GetNumImages() * 5;
+		cout << numHMRows << " " << data.sources.begin()->second->GetNumImages() << " " << data.channels.cols() << endl;
+		cv::Mat hmch( numHMRows, data.channels.rows(), CV_32FC3, cv::Scalar(0) );
+		data.channels /= data.channels.maxCoeff();
+		for( unsigned rc = 0; rc < std::min(hmch.rows, (int)data.channels.cols()); ++rc )
 		{
-			float x = data.channels(cc,rc);
-			cv::Vec3f &p = hmch.at<cv::Vec3f>(rc,cc);
-			
-			p[2] = 1 - (0.5 + 0.5 * cos(  x   * 3.14) );
-			p[1] = 1 - (0.5 + 0.5 * cos(  x   * 6.28) );
-			p[0] = 1 - (0.5 + 0.5 * cos((x+1) * 3.14) );
+			for( unsigned cc = 0; cc < hmch.cols; ++cc )
+			{
+				float x = data.channels(cc,rc);
+				cv::Vec3f &p = hmch.at<cv::Vec3f>(rc,cc);
+				
+				p[2] = 1 - (0.5 + 0.5 * cos(  x   * 3.14) );
+				p[1] = 1 - (0.5 + 0.5 * cos(  x   * 6.28) );
+				p[0] = 1 - (0.5 + 0.5 * cos((x+1) * 3.14) );
+			}
 		}
+		data.channelsHeatmap = hmch;
 	}
-	data.channelsHeatmap = hmch;
+	else
+	{
+		data.channelsHeatmap = cv::Mat( 1, data.channels.rows(), CV_32FC3, cv::Scalar(0) );
+	}
 	
 	
 	
@@ -331,6 +337,10 @@ int main(int argc, char* argv[])
 				if( mfc-2 < 0 || mfc+2 >=  ti->second.cols() )
 					continue;
 				
+				if( ti->first.find("nose") >= 0 )
+				{
+					cout << ti->second.col( mfc    ).transpose() << endl;
+				}
 				
 				hVec2D a = calib.Project( ti->second.col( mfc-2  ).head(4) );
 				hVec2D b = calib.Project( ti->second.col( mfc-1  ).head(4) );

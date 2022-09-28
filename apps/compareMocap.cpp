@@ -80,6 +80,8 @@ struct SData
 
 bool GetLine( SData &data, int tfc, int mfc, std::string n0, std::string n1, cv::Point &p0, cv::Point &p1)
 {
+	if( mfc < 0 )
+		return false;
 	std::stringstream ss0;
 	ss0 << std::setw(2) << std::setfill('0') << tfc << "-" << n0;
 	
@@ -332,7 +334,8 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	
+	auto axesNode = Rendering::GenerateAxisNode3D( 500, "axesNode", ren );
+	ren->Get3dRoot()->AddChild(axesNode);
 	
 	cind = 0;
 	bool paused = false;
@@ -363,6 +366,7 @@ int main(int argc, char* argv[])
 			img = data.sources[ ind2id[cind] ]->GetCurrent().clone();
 			
 			ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+			ren->Get3dCamera()->SetFromCalibration( calib, 500, 15000 );
 			ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
 			
 			
@@ -407,36 +411,36 @@ int main(int argc, char* argv[])
 				
 				cv::Point a, b;
 				
-				if( GetLine( data, tfc, mfc, "rShoulder", "rElbow", a, b) )
+				if( GetLine( data, tfc, mfc, "RIGHT_SHOULDER", "RIGHT_ELBOW", a, b) )
 				{
 					cv::line( img, a, b, colour, 2 );
 				}
-				if( GetLine( data, tfc, mfc, "rElbow", "rWrist", a, b) )
+				if( GetLine( data, tfc, mfc, "RIGHT_ELBOW", "RIGHT_WRIST", a, b) )
 				{
 					cv::line( img, a, b, colour, 2 );
 				}
-				if( GetLine( data, tfc, mfc, "lShoulder", "lElbow", a, b) )
+				if( GetLine( data, tfc, mfc, "LEFT_SHOULDER", "LEFT_ELBOW", a, b) )
 				{
 					cv::line( img, a, b, colour/2, 2 );
 				}
-				if( GetLine( data, tfc, mfc, "lElbow", "lWrist", a, b) )
+				if( GetLine( data, tfc, mfc, "LEFT_ELBOW", "LEFT_WRIST", a, b) )
 				{
 					cv::line( img, a, b, colour/2, 2 );
 				}
 				
-				if( GetLine( data, tfc, mfc, "rHip", "rKnee", a, b) )
+				if( GetLine( data, tfc, mfc, "RIGHT_HIP", "RIGHT_KNEE", a, b) )
 				{
 					cv::line( img, a, b, colour, 2 );
 				}
-				if( GetLine( data, tfc, mfc, "rKnee", "rAnkle", a, b) )
+				if( GetLine( data, tfc, mfc, "RIGHT_KNEE", "RIGHT_ANKLE", a, b) )
 				{
 					cv::line( img, a, b, colour, 2 );
 				}
-				if( GetLine( data, tfc, mfc, "lHip", "lKnee", a, b) )
+				if( GetLine( data, tfc, mfc, "LEFT_HIP", "LEFT_KNEE", a, b) )
 				{
 					cv::line( img, a, b, colour/2, 2 );
 				}
-				if( GetLine( data, tfc, mfc, "lKnee", "lAnkle", a, b) )
+				if( GetLine( data, tfc, mfc, "LEFT_KNEE", "LEFT_ANKLE", a, b) )
 				{
 					cv::line( img, a, b, colour/2, 2 );
 				}
