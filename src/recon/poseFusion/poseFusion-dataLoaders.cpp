@@ -1,5 +1,6 @@
 #include "recon/poseFusion/poseFusion.h"
-#include <cv.hpp>
+#include <opencv2/opencv.hpp>
+
 
 #include "misc/tokeniser.h"
 
