@@ -129,3 +129,10 @@ To make the html book of the documentation:
   - enter the docs directory: `cd docs/`
   - run the `.book` file: `./mc_core.book`
     - the `.book` file is actually a python script which wraps up calls to `pandoc` for making a nice html book from the markdown files.
+
+
+## Building Docker image
+
+1. pull or build mc_core:4.6.0 (see mc_core:opencv4 branch for details on how to build that)
+2. run `git clone git@github.com:camera-mc-dev/mc_sds.git` Note: it needs to be a subdirectory to Dockerfile (even if you have `mc_sds`, the path needs to be `/mc_sds` relative to this directory) 
+3. run `(sudo) docker build . -t mc_rec:4.6.0`

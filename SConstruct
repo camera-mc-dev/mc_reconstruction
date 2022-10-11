@@ -120,7 +120,7 @@ colors['end']    = '\033[0m'
 # If the output is not a terminal, remove the colors we just defined :)
 # (yes, I may have just copy-pasted these colouring sections to save me time...
 if not sys.stdout.isatty():
-	for key, value in colors.iteritems():
+	for key in colors:
 		colors[key] = ''
 
 # -------------------------------------------------------

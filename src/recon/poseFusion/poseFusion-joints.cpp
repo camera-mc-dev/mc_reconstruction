@@ -5,6 +5,7 @@
 #include <opencv2/opencv.hpp>
 
 
+
 hVec3D RANSACIntersectRays3D( std::vector< hVec3D > &starts, std::vector< hVec3D > &rays, std::vector<float> &confidences, std::vector<int> &resInliers, float thresh )
 {
 	//
