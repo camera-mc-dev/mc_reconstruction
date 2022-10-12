@@ -1,7 +1,6 @@
 #include "recon/poseFusion/poseFusion.h"
 #include <opencv2/opencv.hpp>
 
-
 #include "misc/tokeniser.h"
 
 int FNoFromJSONFilename( skeleton_t skelType, boost::filesystem::path pth )
