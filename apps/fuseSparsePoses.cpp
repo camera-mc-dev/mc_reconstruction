@@ -239,6 +239,11 @@ void ParseConfig( std::string cfgFile, SData &data )
 				std::string s = data.dataRoot + data.testRoot + (const char*)cfg.lookup("C3DOffsetFile");
 				
 				std::ifstream infi(s);
+				if( !infi )
+				{
+					cout << "Could not open specified offset file: " + s );
+					exit(0);
+				}
 				std::string x;
 				infi >> x;
 				if( x.find("extra") == std::string::npos )
