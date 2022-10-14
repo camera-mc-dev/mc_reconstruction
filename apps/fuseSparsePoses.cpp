@@ -107,7 +107,11 @@ void ParseConfig( std::string cfgFile, SData &data )
 			
 			cout << css.str() << endl;
 			
-			data.occSettings.calibs[sc].Read( css.str() );
+			if( !data.occSettings.calibs[sc].Read( css.str() ) )
+			{
+				throw std::runtime_error( "Could not open calib file: " + css.str() );
+			}
+			
 		}
 		
 		data.poseSources.resize( poseSrcSetting.getLength() );
