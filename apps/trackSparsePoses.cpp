@@ -80,7 +80,10 @@ void ParseConfig( std::string cfgFile, SData &data )
 			
 			cout << css.str() << endl;
 			
-			data.occSettings.calibs[sc].Read( css.str() );
+			if( !data.occSettings.calibs[sc].Read( css.str() ) )
+			{
+				throw std::runtime_error( "Could not open calib file: " + css.str() );
+			}
 		}
 		
 		data.poseSources.resize( poseSrcSetting.getLength() );
@@ -345,6 +348,11 @@ int main( int argc, char* argv[] )
 		{
 			ren->SetBGImage( visOcc );
 			ren->StepEventLoop();
+			
+// 			auto g = ren->Capture();
+// 			std::stringstream ss;
+// 			ss << "trk0/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
+// 			SaveImage( g, ss.str() );
 		}
 		
 	}
