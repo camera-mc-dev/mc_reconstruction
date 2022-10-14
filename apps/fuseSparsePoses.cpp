@@ -241,7 +241,7 @@ void ParseConfig( std::string cfgFile, SData &data )
 				std::ifstream infi(s);
 				if( !infi )
 				{
-					cout << "Could not open specified offset file: " + s );
+					cout << "Could not open specified offset file: " << s ;
 					exit(0);
 				}
 				std::string x;
