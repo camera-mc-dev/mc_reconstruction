@@ -45,6 +45,8 @@ RUN make -j8
 
 WORKDIR /deps/opensim_build
 RUN cmake ../opensim-core \
+      -DBUILD_API_EXAMPLES=OFF\
+      -DBUILD_TESTING=OFF\
       -DCMAKE_BUILD_TYPE=RelWithDebInfo \
       -DOPENSIM_DEPENDENCIES_DIR="/deps/opensim_dependencies_install" \
       -DOPENSIM_WITH_CASADI=OFF \
@@ -57,4 +59,6 @@ RUN make install
 # ----------------
 WORKDIR /home/mc_dev/mc_reconstruction/
 COPY . .
-#RUN scons -j8
+RUN scons -j8
+
+WORKDIR /home
