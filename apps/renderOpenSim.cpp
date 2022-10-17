@@ -13,11 +13,15 @@ namespace osim = OpenSim;
 #include "math/mathTypes.h"
 #include "renderer2/basicRenderer.h"
 #include "renderer2/basicHeadlessRenderer.h"
+#include "renderer2/renWrapper.h"
+
 #include "misc/vtpLoader.h"
 #include "misc/motLoader.h"
 
 #include "imgio/imagesource.h"
 #include "imgio/vidsrc.h"
+#include "imgio/vidWriter.h"
+
 #include "commonConfig/commonConfig.h"
 #include "math/matrixGenerators.h"
 
@@ -25,8 +29,6 @@ namespace osim = OpenSim;
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
-
-// #define USE_HEADLESS
 
 // spit out 4x4 transformations to disk
 // sparse fusion
@@ -42,11 +44,7 @@ public:
 	
 	// Initialise render nodes (must provide the renderer)
 	// returns the root node.
-#ifdef USE_HEADLESS
-	void InitialiseRenderNodes( std::shared_ptr<Rendering::BasicHeadlessRenderer> &ren );
-#else
-	void InitialiseRenderNodes( std::shared_ptr<Rendering::BasicPauseRenderer> &ren );
-#endif
+	void InitialiseRenderNodes( std::shared_ptr<Rendering::AbstractRenderer> ren );
 	
 	// get access to the root node.
 	std::shared_ptr< Rendering::SceneNode > RootNode() {return rootNode;}
@@ -98,7 +96,7 @@ int syncOffset;
 
 int main(int argc, char* argv[] )
 {
-	if( argc != 3 && argc != 7 && argc != 8 )
+	if( argc != 2 )
 	{
 		cout << "tool to test loading/rendering an OpenSim model"     << endl;
 		cout << "on top of a calibrated image source."                << endl;
@@ -108,92 +106,93 @@ int main(int argc, char* argv[] )
 		cout << "files (.vtp probably)"                               << endl;
 		cout << "calib file only need be supplied for video sources " << endl;
 		cout << endl;
-		cout << argv[0] << "<model file> <motion file> <geometry dir> <save dir> <syncFile> <image source> | <calib file>" << endl;
+		cout << argv[0] << "<config file>" << endl;
 		cout << endl;
 		cout << "or for bioCV data with assumed dataRoot of /data2/bioCV" << endl;
 		cout << "<testRoot> <camera>" << endl;
 		exit(0);
 	}
 	
-	std::string modelFile, motionFile, geomDir, saveDir, source, calibFile, syncFile, poseDumpFile;
+	std::string modelFile, motionFile, geomDir, saveDir, source, calibFile, syncFile, poseDumpFile, renderOutput;
 	bool providedCalibFile = false;
+	bool renderHeadless = false;
+	bool dumpTransforms;
+	bool useSyncFile = false;
 	
-	if( argc == 3 )
+	
+	
+	try
 	{
-		std::string dataRoot = "/data2/bioCV/";
-		std::string testRoot = argv[1];
+		libconfig::Config cfg;
+		cout << "read : " << argv[1] << endl;
+		cfg.readFile( argv[1] );
 		
-// 		std::stringstream ss;
-// 		ss << dataRoot << testRoot << "../biocv_fullbody_markerless_scaled.osim";
-// 		modelFile = ss.str();
-// 		
-// 		ss.str("");
-// 		ss << dataRoot << testRoot << "/op-fused/joints_kalman.mot";
-// 		motionFile = ss.str();
+		modelFile  = (const char*)cfg.lookup("modelFile");
+		motionFile = (const char*)cfg.lookup("motionFile");
+		geomDir    = (const char*)cfg.lookup("geomDir");
+		saveDir    = (const char*)cfg.lookup("outputDir");
+		
+		if( cfg.exists("dumpTransforms") )
+		{
+			dumpTransforms = cfg.lookup("dumpTransforms");
+		}
+		
+		if( cfg.exists("syncFile") )
+		{
+			syncFile = (const char*)cfg.lookup("syncFile");
+			useSyncFile = true;
+		}
 		
 		
-		std::stringstream ss;
-		ss << dataRoot << testRoot << "../biocv_fullbody_markers_scaled.osim";
-		modelFile = ss.str();
-		
-		ss.str("");
-		ss << dataRoot << testRoot << "/markers.mot";
-		motionFile = ss.str();
-		
-		geomDir = "/data2/opensim/opensimGeometry/";
-		
-		ss.str("");
-		ss << dataRoot << testRoot << "/openSimRender-" << argv[2] << "/";
-		saveDir = ss.str();
-		
-		ss.str("");
-		ss << dataRoot << testRoot << "/" << argv[2] << ".mp4";
-		source = ss.str();
-		
-		ss.str("");
-		ss << dataRoot << testRoot << "../" << argv[2] << ".mp4-mocAligned.calib";
-		calibFile = ss.str();
-		providedCalibFile = true;
-		
-		ss.str("");
-		ss << dataRoot << testRoot << "/frameOffset";
-		syncFile = ss.str();
-	}
-	else
-	{
-		modelFile  = argv[1];
-		motionFile = argv[2];
-		geomDir    = argv[3];
-		
-		saveDir = argv[4];
-		syncFile = argv[5];
-		
-		source = argv[6];
-		
-		if( argc == 8 )
+		source = (const char*)cfg.lookup("source");
+		if( cfg.exists("calibration") )
 		{
 			providedCalibFile = true;
-			calibFile = argv[7];
+			calibFile = (const char*)cfg.lookup("calibration");;
 		}
+		
+		if( cfg.exists("renderHeadless") )
+		{
+			renderHeadless = cfg.lookup("renderHeadless");
+			renderOutput   = saveDir + "/" + (const char*)cfg.lookup("renderTarget");
+		}
+		
+	}
+	catch( libconfig::SettingException &e)
+	{
+		cout << "Setting error: " << endl;
+		cout << e.what() << endl;
+		cout << e.getPath() << endl;
+		exit(0);
+	}
+	catch( libconfig::ParseException &e )
+	{
+		cout << "Parse error:" << endl;
+		cout << e.what() << endl;
+		cout << e.getError() << endl;
+		cout << e.getFile() << endl;
+		cout << e.getLine() << endl;
+		exit(0);
 	}
 	
 	poseDumpFile = saveDir + "../openSimTransformations";
 	
-	std::ifstream syncfi( syncFile );
-	if( !syncfi )
-		throw std::runtime_error("Can't load sync file: " + syncFile );
-	std::string x;
-	syncfi >> x;
-	assert( x.compare("offset:") == 0 );
-	syncfi >> syncOffset;
+	if( useSyncFile )
+	{
+		std::ifstream syncfi( syncFile );
+		if( !syncfi )
+			throw std::runtime_error("Can't load sync file: " + syncFile );
+		std::string x;
+		syncfi >> x;
+		assert( x.compare("offset:") == 0 );
+		syncfi >> syncOffset;
+	}
+	else
+		syncOffset = 0;
 	
 	cout << "syncOffset: " << syncOffset << endl;
 	sleep(3);
 	
-	// create the model wrapper/converter
-	OpenSimConverter osimConverter(modelFile, motionFile, geomDir);
-	osimConverter.DumpPose( poseDumpFile );
-	cout << "temporarily skipping all rendering" << endl;
 	
 	// where we output to.
 	if( boost::filesystem::is_directory( saveDir ))
@@ -209,6 +208,13 @@ int main(int argc, char* argv[] )
 	{
 		boost::filesystem::path p(saveDir);
 		boost::filesystem::create_directories(p);
+	}
+	
+	// create the model wrapper/converter
+	OpenSimConverter osimConverter(modelFile, motionFile, geomDir);
+	if( dumpTransforms )
+	{
+		osimConverter.DumpPose( poseDumpFile );
 	}
 	
 	// initialise image source
@@ -255,25 +261,43 @@ int main(int argc, char* argv[] )
 	
 	cout << "win W, H: " << winW << ", " << winH << endl;
 	
-#ifdef USE_HEADLESS
-	std::shared_ptr<Rendering::BasicHeadlessRenderer> ren;
-#else
-	std::shared_ptr<Rendering::BasicPauseRenderer> ren;
-#endif
-	Rendering::RendererFactory::Create( ren, winW,winH, "opensim renderer" );
-	ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10 );
-	ren->Get3dCamera()->SetFromCalibration( isrc->GetCalibration(), 0.2, 20000 );
+	RenWrapper<Rendering::BasicPauseRenderer, Rendering::BasicHeadlessRenderer> renWrapper( renderHeadless, winW, winH, "opensim renderer" );
+
+	renWrapper.Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10 );
+	renWrapper.Get3dCamera()->SetFromCalibration( isrc->GetCalibration(), 0.2, 20000 );
 	
-	ren->SetActive();
+	renWrapper.GetActive()->SetActive();
 	glCullFace(GL_FRONT);
 	
 	
 	// initialise the render nodes
-	osimConverter.InitialiseRenderNodes(ren);
+	osimConverter.InitialiseRenderNodes(renWrapper.GetActive());
 	
 	// put the model's root node on our render tree.
-	ren->Get3dRoot()->AddChild( osimConverter.RootNode() );
+	renWrapper.Get3dRoot()->AddChild( osimConverter.RootNode() );
 	
+	// are we outputting to video or images?
+	std::shared_ptr<VidWriter> vidWriter;
+	bool outputToVideo = false;
+	if( renderHeadless )
+	{
+		boost::filesystem::path p( renderOutput );
+		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+		{
+			// output is to a directory.
+			outputToVideo = false;
+		}
+		else if(p.extension() == ".mp4")
+		{
+			outputToVideo = true;
+			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
+			vidWriter.reset( new VidWriter( renderOutput, "h264", tmp, 25, 18, "yuv422p" ) );
+		}
+		else
+		{
+			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+		}
+	}
 	
 	// iterate over video frames...
 	bool done = false;
@@ -285,7 +309,7 @@ int main(int argc, char* argv[] )
 		// get current image.
 		img = isrc->GetCurrent();
 		undist = isrc->GetCalibration().Undistort(img);
-		ren->SetBGImage(undist);
+		renWrapper.SetBGImage(undist);
 		
 		// figure out the right frame number(?)
 		unsigned fno = isrc->GetCurrentFrameID();
@@ -294,22 +318,33 @@ int main(int argc, char* argv[] )
 		osimConverter.SetPose( fno );
 		
 		// do the render.
-#ifdef USE_HEADLESS
-		ren->StepEventLoop();
-#else
-		ren->Step(paused, advance);
-		while( paused && !advance )
+		if( renderHeadless )
+			renWrapper.StepEventLoop();
+		else
 		{
-			ren->Step(paused, advance);
+			renWrapper.ren->Step(paused, advance);
+			while( paused && !advance )
+			{
+				renWrapper.ren->Step(paused, advance);
+			}
+			advance = false;
 		}
-		advance = false;
-#endif
 		
 		// capture and save (if wanted)
-		cv::Mat grab = ren->Capture();
-		std::stringstream ss;
-		ss << saveDir << "/" << std::setw(6) << std::setfill('0') << fno << ".jpg";
-		SaveImage( grab, ss.str() );
+		if( renderHeadless )
+		{
+			cv::Mat grab = renWrapper.Capture();
+			if( outputToVideo )
+			{
+				vidWriter->Write( grab );
+			}
+			else
+			{
+				std::stringstream ss;
+				ss << saveDir << "/" << std::setw(6) << std::setfill('0') << fno << ".jpg";
+				SaveImage( grab, ss.str() );
+			}
+		}
 		
 		// advance source, see if we're done
 		done = !isrc->Advance();
@@ -462,11 +497,8 @@ OpenSimConverter::OpenSimConverter( std::string modelFile, std::string motionFil
 	
 }
 
-#ifdef USE_HEADLESS
-void OpenSimConverter::InitialiseRenderNodes( std::shared_ptr<Rendering::BasicHeadlessRenderer> &ren )
-#else
-void OpenSimConverter::InitialiseRenderNodes( std::shared_ptr<Rendering::BasicPauseRenderer> &ren )
-#endif
+
+void OpenSimConverter::InitialiseRenderNodes( std::shared_ptr<Rendering::AbstractRenderer> ren )
 {
 	// model will be grey/white
 	Eigen::Vector4f grey; grey << 0.97, 0.97, 0.97, 1.0f;

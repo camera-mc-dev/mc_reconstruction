@@ -1,17 +1,30 @@
 #include "recon/poseFusion/poseFusion.h"
 #include "imgio/sourceFactory.h"
+#include "imgio/vidWriter.h"
 #include "commonConfig/commonConfig.h"
 
 #include "renderer2/basicRenderer.h"
+#include "renderer2/basicHeadlessRenderer.h"
+#include "renderer2/renWrapper.h"
 
 int main( int argc, char *argv[] )
 {
-	if( argc != 4 )
+	if( argc != 4 && argc != 5)
 	{
 		cout << "Tool to render sparse pose detections" << endl;
 		cout << "Usage: " << endl;
-		cout << argv[0] << "<image source> <pose type> <pose source>" << endl;
+		cout << argv[0] << "<image source> <pose type> <pose source> | <render target>" << endl << endl;
+		cout << "<render target> is either a directory name or .mp4 video filename, " << endl;
+		cout << "and iff it is specified, rendering will be headless                " << endl << endl;
 		exit(0);
+	}
+	
+	bool headless = false;
+	std::string renderTarget;
+	if( argc == 5 )
+	{
+		renderTarget = argv[4];
+		headless = true;
 	}
 	
 	//
@@ -65,8 +78,7 @@ int main( int argc, char *argv[] )
 	
 	
 	// create the renderer
-	std::shared_ptr< Rendering::BasicRenderer > ren;
-	
+		
 	cout << "creating window" << endl;
 	CommonConfig ccfg;
 	float winW = ccfg.maxSingleWindowWidth;
@@ -76,10 +88,10 @@ int main( int argc, char *argv[] )
 		winH = ccfg.maxSingleWindowHeight;
 		winW = winH / ar;
 	}
-	Rendering::RendererFactory::Create( ren, winW, winH, "sparse pose vis");
+	RenWrapper<Rendering::BasicRenderer, Rendering::BasicHeadlessRenderer> renWrapper( headless, winW, winH, "sparse pose vis" );
 	
-	ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
-	ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+	renWrapper.Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+	renWrapper.Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
 	
 	// we want to draw lines between some subsets of the keypoints
 	std::vector< std::pair<int,int> > leftLines, rightLines, midLines;
@@ -130,6 +142,33 @@ int main( int argc, char *argv[] )
 			// Not bothering.
 			break;
 	}
+	
+	
+	//
+	// if headless, where do we save to?
+	//
+	std::shared_ptr<VidWriter> vidWriter;
+	bool outputToVideo = false;
+	if( headless )
+	{
+		boost::filesystem::path p( renderTarget );
+		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+		{
+			// output is to a directory.
+			outputToVideo = false;
+		}
+		else if(p.extension() == ".mp4")
+		{
+			outputToVideo = true;
+			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
+			vidWriter.reset( new VidWriter( renderTarget, "h264", tmp, 25, 18, "yuv422p" ) );
+		}
+		else
+		{
+			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+		}
+	}
+	
 	
 	//
 	// And iterate over the image frames
@@ -193,13 +232,24 @@ int main( int argc, char *argv[] )
 				cv::circle( img, cv::Point( p(0), p(1) ), 4, cv::Scalar( b,g,r ), 2 );
 			}
 		}
-		ren->SetBGImage(img);
+		renWrapper.SetBGImage(img);
 		
-		ren->StepEventLoop();
-// 		auto g = ren->Capture();
-// 		std::stringstream ss;
-// 		ss << "spRender/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
-// 		SaveImage( g, ss.str() );
+		renWrapper.StepEventLoop();
+		
+		if( headless )
+		{
+			cv::Mat grab = renWrapper.Capture();
+			if( outputToVideo )
+			{
+				vidWriter->Write( grab );
+			}
+			else
+			{
+				std::stringstream ss;
+				ss << renderTarget << "/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
+				SaveImage( grab, ss.str() );
+			}
+		}
 	}
 	while( isrc->Advance() );
 }
