@@ -116,7 +116,8 @@ void GetSources( SData &data );
 
 class AlignRenderer : public Rendering::BasicRenderer
 {
-	friend class Rendering::RendererFactory;	
+	friend class Rendering::RendererFactory;
+	template<class T0, class T1 > friend class RenWrapper;
 	// The constructor should be private or protected so that we are forced 
 	// to use the factory...
 protected:
@@ -252,6 +253,7 @@ int main(int argc, char* argv[])
 	// create the renderer for display purposes.
 	cout << "creating renderer..." << endl;
 	std::shared_ptr<RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer> > renWrapper;
+	std::shared_ptr<VidWriter> vidWriter;
 	float winW = ccfg.maxSingleWindowWidth;
 	float winH = winW * ar;
 	if( winH > ccfg.maxSingleWindowHeight )
@@ -261,7 +263,7 @@ int main(int argc, char* argv[])
 	}
 	if( data.visualise )
 	{
-		renWrapper.reset( new SRenWrapper( data.useHeadless, winW, winH, "compare mocap" ) );
+		renWrapper.reset( new RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer>( data.useHeadless, winW, winH, "compare mocap" ) );
 		
 		boost::filesystem::path p( data.headlessRenderOutput );
 		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
@@ -273,7 +275,7 @@ int main(int argc, char* argv[])
 		{
 			data.outputToVideo = true;
 			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
-			vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", 25, 18, "yuv422" ) );
+			vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", tmp, 25, 18, "yuv422p" ) );
 		}
 		else
 		{
@@ -352,8 +354,8 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	auto axesNode = Rendering::GenerateAxisNode3D( 500, "axesNode", ren );
-	ren->Get3dRoot()->AddChild(axesNode);
+	auto axesNode = Rendering::GenerateAxisNode3D( 500, "axesNode", renWrapper->GetActive() );
+	renWrapper->Get3dRoot()->AddChild(axesNode);
 	
 	cind = 0;
 	bool paused = false;
@@ -473,8 +475,8 @@ int main(int argc, char* argv[])
 			renWrapper->SetBGImage(img);
 			
 			frameAdvance = 0;
-			if( data.headless )
-				done = !renWrapper->StepEventLoop();
+			if( data.useHeadless )
+				done = renWrapper->StepEventLoop();
 			else
 			{
 				done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
