@@ -1,6 +1,8 @@
 #include "imgio/imagesource.h"
 #include "imgio/vidsrc.h"
 #include "imgio/loadsave.h"
+#include "imgio/vidWriter.h"
+
 #include "math/mathTypes.h"
 #include "math/intersections.h"
 #include "math/matrixGenerators.h"
@@ -9,6 +11,7 @@
 #include "renderer2/geomTools.h"
 #include "renderer2/sdfText.h"
 #include "renderer2/showImage.h"
+#include "renderer2/renWrapper.h"
 
 #include "misc/c3d.h"
 
@@ -73,7 +76,9 @@ struct SData
 	std::map< std::string, genMatrix > tracks;
 	
 	bool visualise;
-	
+	bool useHeadless;
+	std::string headlessRenderOutput;
+	bool outputToVideo;
 	
 	skeleton_t skelType;
 };
@@ -157,12 +162,6 @@ public:
 		return true;
 	}
 };
-
-
-
-
-
-
 
 
 
@@ -251,8 +250,8 @@ int main(int argc, char* argv[])
 	float ar = r/ (float) c;
 	
 	// create the renderer for display purposes.
-	cout << "creating window" << endl;
-	std::shared_ptr<AlignRenderer> ren;
+	cout << "creating renderer..." << endl;
+	std::shared_ptr<RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer> > renWrapper;
 	float winW = ccfg.maxSingleWindowWidth;
 	float winH = winW * ar;
 	if( winH > ccfg.maxSingleWindowHeight )
@@ -261,7 +260,26 @@ int main(int argc, char* argv[])
 		winW = winH / ar;
 	}
 	if( data.visualise )
-		Rendering::RendererFactory::Create( ren, winW, winH, "mocap vis");
+	{
+		renWrapper.reset( new SRenWrapper( data.useHeadless, winW, winH, "compare mocap" ) );
+		
+		boost::filesystem::path p( data.headlessRenderOutput );
+		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+		{
+			// output is to a directory.
+			data.outputToVideo = false;
+		}
+		else if(p.extension() == ".mp4")
+		{
+			data.outputToVideo = true;
+			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
+			vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", 25, 18, "yuv422" ) );
+		}
+		else
+		{
+			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+		}
+	}
 	
 	//
 	// Load the c3d track files.
@@ -365,9 +383,9 @@ int main(int argc, char* argv[])
 		{
 			img = data.sources[ ind2id[cind] ]->GetCurrent().clone();
 			
-			ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
-			ren->Get3dCamera()->SetFromCalibration( calib, 500, 15000 );
-			ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+			renWrapper->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+			renWrapper->Get3dCamera()->SetFromCalibration( calib, 500, 15000 );
+			renWrapper->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
 			
 			
 			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
@@ -452,13 +470,18 @@ int main(int argc, char* argv[])
 			}
 			
 			
-			ren->SetBGImage(img);
+			renWrapper->SetBGImage(img);
 			
 			frameAdvance = 0;
-			done = !ren->Step(camChange, paused, frameAdvance);
-			while( paused && frameAdvance == 0 )
+			if( data.headless )
+				done = !renWrapper->StepEventLoop();
+			else
 			{
-				done = !ren->Step(camChange, paused, frameAdvance);
+				done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
+				while( paused && frameAdvance == 0 )
+				{
+					done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
+				}
 			}
 			cout << "cc, fa: " << camChange << " " << frameAdvance << " " << cind << endl;
 			if( vfc >= 0 && (!paused || (paused && frameAdvance == 1 )) )
@@ -476,11 +499,23 @@ int main(int argc, char* argv[])
 				camChange = 0;
 			}
 			
-			cv::Mat cap = ren->Capture();
-			std::stringstream ss;
-			ss << "compVid/" << std::setw(6) << std::setfill('0') << data.sources.begin()->second->GetCurrentFrameID() << ".jpg";
-			cout << ss.str() << endl;
-			SaveImage( cap, ss.str() );
+			if( data.useHeadless )
+			{
+				cv::Mat cap = renWrapper->Capture();
+				
+				if( data.outputToVideo )
+				{
+					vidWriter->Write( cap );
+				}
+				else
+				{
+					std::stringstream ss;
+					ss << data.headlessRenderOutput << "/" << std::setw(6) << std::setfill('0') << data.sources.begin()->second->GetCurrentFrameID() << ".jpg";
+					cout << ss.str() << endl;
+					SaveImage( cap, ss.str() );
+				}
+				
+			}
 		}
 		
 		
@@ -552,6 +587,12 @@ void ParseConfig( std::string configFile, SData &data )
 		if( cfg.exists("visualise") )
 		{
 			data.visualise = cfg.lookup("visualise");
+			data.useHeadless = false;
+			if( cfg.exists("renderHeadless") )
+			{
+				data.useHeadless = cfg.lookup("renderHeadless");
+				data.headlessRenderOutput = (const char*) cfg.lookup("renderTarget");
+			}
 		}
 		
 		data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
