@@ -134,4 +134,5 @@ To make the html book of the documentation:
 ## Building Docker image
 1. make sure nvidia-container-runtime is installed on your machine. Installation instructions (for linux) can be found here: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
 2. run `git clone git@github.com:camera-mc-dev/mc_reconstruction.git` 
-3. run `(sudo) docker build . -t mc_rec:4.6.0`
+3. copy a valid ssh-key to the repository to `/mc_reconstruction/` root directory (the same directory as the Dockerfile) and name it id_rsa. This will be copied into the docker build container and deleted when it completes.
+4. run `(sudo) docker build . -t mc_rec:4.6.0`
