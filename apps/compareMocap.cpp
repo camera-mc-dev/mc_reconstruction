@@ -600,7 +600,7 @@ void ParseConfig( std::string configFile, SData &data )
 			if( cfg.exists("renderHeadless") )
 			{
 				data.useHeadless = cfg.lookup("renderHeadless");
-				data.headlessRenderOutput = (const char*) cfg.lookup("renderTarget");
+				data.headlessRenderOutput = data.dataRoot + data.testRoot + (const char*) cfg.lookup("renderTarget");
 			}
 		}
 		
