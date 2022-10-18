@@ -326,31 +326,38 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	cout << data.offsetFile << endl;
-	std::ifstream infi( data.offsetFile );
-	std::string type;
-	infi >> type;
-	if( type.compare("offset:") == 0 )
+	if( data.offsetFile.compare("None") == 0 )
 	{
-		infi >> data.mocapOffset;
-		cout << type << " " << data.mocapOffset << endl;
+		data.mocapOffset = 0;
 	}
-	else if( type.compare("extraOffset:") == 0 )
+	else
 	{
-		int eo;
-		infi >> eo;
-// 		eo = -9; // fuck it...
-		data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
-		cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
-		
-		infi.close();
-		std::ofstream outfi(data.offsetFile);
-		
-		outfi << "offset: " << data.mocapOffset << endl;
-		outfi << "extraOffset: " << eo << endl;
-		outfi << endl;
-		outfi << "-------------" << endl;
-		outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
+		cout << data.offsetFile << endl;
+		std::ifstream infi( data.offsetFile );
+		std::string type;
+		infi >> type;
+		if( type.compare("offset:") == 0 )
+		{
+			infi >> data.mocapOffset;
+			cout << type << " " << data.mocapOffset << endl;
+		}
+		else if( type.compare("extraOffset:") == 0 )
+		{
+			int eo;
+			infi >> eo;
+// 			eo = -9; // fuck it...
+			data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
+			cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
+			
+			infi.close();
+			std::ofstream outfi(data.offsetFile);
+			
+			outfi << "offset: " << data.mocapOffset << endl;
+			outfi << "extraOffset: " << eo << endl;
+			outfi << endl;
+			outfi << "-------------" << endl;
+			outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
+		}
 	}
 	
 	
@@ -597,7 +604,9 @@ void ParseConfig( std::string configFile, SData &data )
 			}
 		}
 		
-		data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
+		data.offsetFile = "None";
+		if( cfg.exists("offsetFile") )
+			data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
 		
 		data.skelType = OPOSE;
 		if( cfg.exists("skelType") )
