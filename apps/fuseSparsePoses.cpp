@@ -728,6 +728,8 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 			//
 			// "empty" frame - a point residual of -1.0 says invalid data.
 			// but we still must specify a point for all pointNames.
+			// actually, we can't use -1 because that seems to cause nan on loading in
+			// python and thus OpenSim and so we fail to solve, so 0,0,0,0 will just have to do.
 			//
 			ezc3d::DataNS::Points3dNS::Points pts;
 			for( unsigned pc = 0; pc < pointNames.size(); ++pc )
@@ -736,7 +738,7 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 				pt.x( 0.0f );
 				pt.y( 0.0f );
 				pt.z( 0.0f );
-				pt.residual(-1.0f);
+				pt.residual(0.0f);
 				
 				pts.point(pt, name2idx[ pointNames[pc] ] );
 			}
@@ -806,7 +808,7 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 						pt.x( 0.0f );
 						pt.y( 0.0f );
 						pt.z( 0.0f );
-						pt.residual(-1.0f);
+						pt.residual(0.0f);
 					}
 					
 					pts.point(pt, name2idx[ pointNames[pc] ] );
