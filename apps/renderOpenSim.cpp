@@ -89,6 +89,7 @@ protected:
 	genMatrix motData;
 	bool isDegrees;
 	
+	
 };
 
 // global but... fuck it.
@@ -119,18 +120,25 @@ int main(int argc, char* argv[] )
 	bool dumpTransforms;
 	bool useSyncFile = false;
 	
+	std::string dataRoot;
+	std::string testRoot;
 	
-	
+	CommonConfig ccfg;
+	dataRoot = ccfg.dataRoot;
 	try
 	{
 		libconfig::Config cfg;
 		cout << "read : " << argv[1] << endl;
 		cfg.readFile( argv[1] );
 		
-		modelFile  = (const char*)cfg.lookup("modelFile");
-		motionFile = (const char*)cfg.lookup("motionFile");
+		if( cfg.exists("dataRoot") )
+			dataRoot  = (const char*)cfg.lookup("dataRoot");
+		testRoot  = (const char*)cfg.lookup("testRoot");
+		
+		modelFile  = dataRoot + testRoot + (const char*)cfg.lookup("modelFile");
+		motionFile = dataRoot + testRoot + (const char*)cfg.lookup("motionFile");
 		geomDir    = (const char*)cfg.lookup("geomDir");
-		saveDir    = (const char*)cfg.lookup("outputDir");
+		saveDir    = dataRoot + testRoot + (const char*)cfg.lookup("outputDir");
 		
 		if( cfg.exists("dumpTransforms") )
 		{
@@ -139,16 +147,16 @@ int main(int argc, char* argv[] )
 		
 		if( cfg.exists("syncFile") )
 		{
-			syncFile = (const char*)cfg.lookup("syncFile");
+			syncFile = dataRoot + testRoot + (const char*)cfg.lookup("syncFile");
 			useSyncFile = true;
 		}
 		
 		
-		source = (const char*)cfg.lookup("source");
-		if( cfg.exists("calibration") )
+		source = dataRoot + testRoot + (const char*)cfg.lookup("source");
+		if( cfg.exists("calibFile") )
 		{
 			providedCalibFile = true;
-			calibFile = (const char*)cfg.lookup("calibration");;
+			calibFile = dataRoot + testRoot + (const char*)cfg.lookup("calibFile");;
 		}
 		
 		if( cfg.exists("renderHeadless") )
@@ -247,7 +255,6 @@ int main(int argc, char* argv[] )
 	}
 	
 	// initialise renderer & renderer calibs/projections.
-	CommonConfig ccfg;
 	cv::Mat img = isrc->GetCurrent();
 	float ar = img.rows / (float)img.cols;
 	float winW = ccfg.maxSingleWindowWidth;
@@ -361,6 +368,42 @@ OpenSimConverter::OpenSimConverter( std::string modelFile, std::string motionFil
 	ReadOpenSimMotFile( motionFile, colNames, motData, isDegrees );
 	
 	cout << "read motion data: " << motData.rows() << " x " << motData.cols() << endl;
+	
+	
+	//
+	// The motion file may not start at time = 0, so we might need to put in a time offset.
+	//
+	float t0 = 0;
+	int c = 0;
+	for( unsigned r = 0; r < std::min(10u, (unsigned)motData.rows()-2 ); ++r )
+	{
+		t0 += motData(r+1,0) - motData(r,0);
+		++c;
+	}
+	float fd = t0 / c; // so one frame, on average, is this long.
+	
+	t0 = motData(0,0);
+	if( t0 > 0 )
+	{
+		float extraFrames = int(t0 / fd);
+		
+		cout << "motion data started at time " << t0 << " which we assume is seconds." << endl;
+		cout << "frame duration appears to be " << fd << " seconds" << endl;
+		cout << "so adding " << extraFrames << " frames of 0 data at the start." << endl;
+		
+		genMatrix X = genMatrix::Zero( extraFrames, motData.cols() );
+		for( unsigned r = 0; r < X.rows(); ++r )
+		{
+			X(r,0) = fd * r;
+		}
+		cout << X.rows() << " " << X.cols() << endl;
+		cout << motData.rows() << " " << motData.cols() << endl;
+		genMatrix N(X.rows() + motData.rows(), motData.cols() ); 
+		N << X, motData;
+		motData = N;
+	}
+	
+	
 	
 	
 	//
