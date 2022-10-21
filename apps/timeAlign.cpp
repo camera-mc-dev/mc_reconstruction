@@ -295,6 +295,10 @@ int main(int argc, char* argv[])
 			throw std::runtime_error( "Can't recognise name of LED marker in any loaded .c3d files, and no other marker tracks to guess with. " );
 			
 		}
+		else
+		{
+			cout << "we do." << endl;
+		}
 	}
 	
 	
@@ -370,8 +374,12 @@ int main(int argc, char* argv[])
 	genMatrix brightData;
 	if( !data.usePrevious )
 	{
+		cout << "playing through video data to learn light pattern..." << endl;
+		cout << "takes a wee-while normally" << endl;
 		while(!done)
 		{
+			if( fc0 % 30 == 0 )
+				cout << fc0 << " / " << data.sources.begin()->second->GetNumImages() << endl;
 			//
 			// For each image...
 			//
