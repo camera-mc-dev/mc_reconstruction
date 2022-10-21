@@ -590,7 +590,7 @@ int main(int argc, char* argv[])
 	genMatrix bd2g = bd2;
 	
 	Eigen::VectorXf gscv;
-	float numRpt = 3.0f;
+	float numRpt = 10.0f;
 	for(unsigned rpt = 0; rpt < numRpt; ++rpt )
 	{
 		// create the gaussian filter.
@@ -624,7 +624,8 @@ int main(int argc, char* argv[])
 			for( unsigned cc = 0; cc < brightData.cols(); ++cc )
 			{
 				// too lazy to do this properly.
-				bd2g(rc,cc) = (numRpt-1.0)/numRpt * bd2g(rc,cc)  + 1.0/numRpt * gscv(cc);
+				//bd2g(rc,cc) = (numRpt-1.0)/numRpt * bd2g(rc,cc)  + 1.0/numRpt * gscv(cc);
+				bd2g(rc,cc) = 0.5 * bd2g(rc,cc)  + 0.5 * gscv(cc);
 			}
 // 			bd2g.row(rc) =  * bd2g.row(rc) + 1.0/numRpt * gscv;
 		}
@@ -637,16 +638,17 @@ int main(int argc, char* argv[])
 
 	if( data.visualise )
 	{
-		std::ofstream tstfi1("bd2g-tst");
-		for( unsigned rc = 0; rc < bd2g.rows(); ++rc )
+		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
 		{
-			for( unsigned cc = 0; cc < bd2g.cols(); ++cc )
+			for( unsigned cc = 0; cc < brightData.cols(); ++cc )
 			{
-				tstfi1 << bd2g(rc,cc) << " ";
+				for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
+				{
+					float &p = bd.at<float>( rc*10 + rc2, cc );
+					p = bd2g(rc,cc);
+				}
 			}
-			tstfi1 << endl;
 		}
-		tstfi1 << endl;
 		Rendering::ShowImage(bd, 1500);
 	}
 	
