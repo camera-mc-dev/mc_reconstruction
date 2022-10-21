@@ -38,6 +38,8 @@ struct SData
 	std::vector< std::string > trackFiles;
 	std::vector<unsigned> trackStartFrames;
 	std::map< std::string, genMatrix > tracks;
+	genMatrix channels;
+	int useChannel;
 	
 	bool visualise;
 	bool usePrevious;
@@ -173,7 +175,8 @@ int main(int argc, char* argv[])
 	{
 		cout << "loading: " << data.trackFiles[tfc] << endl;
 		std::map< std::string, genMatrix > newTracks;
-		LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
+		genMatrix newChannels;
+		LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks, newChannels );
 		cout << "\tnew tracks: " << newTracks.size() << endl;
 		for( auto ti = newTracks.begin(); ti != newTracks.end(); ++ti )
 		{
@@ -188,6 +191,21 @@ int main(int argc, char* argv[])
 				exit(0);
 			}
 		}
+		
+		if( data.channels.cols() > 0 && data.channels.cols() != newChannels.cols() )
+		{
+			cout << "ignoring channels from file: " << data.trackFiles[tfc] << " because it has different frames from previous channels data " << endl;
+			cout << newChannels.cols() << " vs: " << data.channels.cols() << endl;
+		}
+		else if( data.channels.cols() > 0 )
+		{
+			genMatrix tmp( data.channels.rows() + newChannels.rows(), data.channels.cols() );
+			tmp << data.channels, newChannels;
+			
+			data.channels = tmp;
+		}
+		else
+			data.channels = newChannels;
 	}
 	
 	cout << "track names: " << endl;
@@ -210,6 +228,13 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
+		cout << "Can't recognise LED marker name in .c3d files. Checking if we have analog data.." << endl;
+		if( data.channels.rows() > 0 )
+		{
+			cout << "had " << data.channels.rows() << " analog channels" << endl;
+			exit(0);
+		}
+		
 		// can we try the -7 guess? Only if there are other markers.
 		if( data.tracks.empty() )
 		{
