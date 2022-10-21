@@ -38,8 +38,13 @@ struct SData
 	std::vector< std::string > trackFiles;
 	std::vector<unsigned> trackStartFrames;
 	std::map< std::string, genMatrix > tracks;
+	
+	
 	genMatrix channels;
 	int useChannel;
+	hVec3D flasherPos;
+	
+	
 	
 	bool visualise;
 	bool usePrevious;
@@ -229,24 +234,54 @@ int main(int argc, char* argv[])
 	else
 	{
 		cout << "Can't recognise LED marker name in .c3d files. Checking if we have analog data.." << endl;
-		if( data.channels.rows() > 0 )
+		if( data.useChannel < 0 || data.channels.rows() < data.useChannel )
 		{
 			cout << "had " << data.channels.rows() << " analog channels" << endl;
-			exit(0);
-		}
-		
-		// can we try the -7 guess? Only if there are other markers.
-		if( data.tracks.empty() )
-		{
+			cout << "user asked for channel " << data.useChannel << endl;
+			cout << "so, we can't use channel data either." << endl << endl;
+			
+			cout << "can try -7 guess?" << endl;
+			
+			// can we try the -7 guess? Only if there are other markers.
+			if( data.tracks.empty() )
+			{
+				std::stringstream ss;
+				ss << data.dataRoot << data.testRoot << "/frameOffset";
+				cout << "saving offset to: " << ss.str() << endl;
+				std::ofstream finalfi(ss.str());
+				finalfi << "offset: " << 0 << endl << endl;
+				finalfi << "numVidFrames: " << 0 << endl;
+				finalfi << "numMocapFrames: " << 0 << endl;
+				finalfi << "baseOffset: " << 0 << endl;
+				finalfi << "extraOffset: " << 0 << endl << endl << endl;
+				finalfi << "--- info ---" << endl;
+				finalfi << "mocap frame = video frame + offset" << endl;
+				finalfi << "numVidFrames is number of video frames in sequence" << endl;
+				finalfi << "numMocapFrames is number of mocap frames in sequence" << endl;
+				finalfi << "baseOffset = numMocapFrames - numVidFrames (in theory, both stop at the same time)" << endl;
+				finalfi << "extraOffset = offset - baseOffset (there's a chance this might be constant between trials)" << endl;
+				finalfi << endl;
+				finalfi << "!!! No marker info available for setting offset !!!" << endl;
+				finalfi.close();
+				
+				throw std::runtime_error( "Can't recognise name of LED marker in any loaded .c3d files, and no other marker tracks to guess with. " );
+			}
+			auto ti = data.tracks.begin();
+			
+			int numVidFrames = data.sources.begin()->second->GetNumImages();
+			int numMocapFrames = data.tracks.begin()->second.cols();
+			int baseOffset = numMocapFrames - numVidFrames;
+			int extraOffset = -7;
+			
 			std::stringstream ss;
 			ss << data.dataRoot << data.testRoot << "/frameOffset";
 			cout << "saving offset to: " << ss.str() << endl;
 			std::ofstream finalfi(ss.str());
-			finalfi << "offset: " << 0 << endl << endl;
-			finalfi << "numVidFrames: " << 0 << endl;
-			finalfi << "numMocapFrames: " << 0 << endl;
-			finalfi << "baseOffset: " << 0 << endl;
-			finalfi << "extraOffset: " << 0 << endl << endl << endl;
+			finalfi << "offset: " << baseOffset + extraOffset << endl << endl;
+			finalfi << "numVidFrames: " << numVidFrames << endl;
+			finalfi << "numMocapFrames: " << numMocapFrames << endl;
+			finalfi << "baseOffset: " << numMocapFrames - numVidFrames << endl;
+			finalfi << "extraOffset: " << extraOffset << endl << endl << endl;
 			finalfi << "--- info ---" << endl;
 			finalfi << "mocap frame = video frame + offset" << endl;
 			finalfi << "numVidFrames is number of video frames in sequence" << endl;
@@ -254,40 +289,17 @@ int main(int argc, char* argv[])
 			finalfi << "baseOffset = numMocapFrames - numVidFrames (in theory, both stop at the same time)" << endl;
 			finalfi << "extraOffset = offset - baseOffset (there's a chance this might be constant between trials)" << endl;
 			finalfi << endl;
-			finalfi << "!!! No marker info available for setting offset !!!" << endl;
+			finalfi << "!!! Guessed offset from a fairly typical -7 extra offset !!!" << endl;
 			finalfi.close();
 			
 			throw std::runtime_error( "Can't recognise name of LED marker in any loaded .c3d files, and no other marker tracks to guess with. " );
+			
 		}
-		auto ti = data.tracks.begin();
-		
-		int numVidFrames = data.sources.begin()->second->GetNumImages();
-		int numMocapFrames = data.tracks.begin()->second.cols();
-		int baseOffset = numMocapFrames - numVidFrames;
-		int extraOffset = -7;
-		
-		std::stringstream ss;
-		ss << data.dataRoot << data.testRoot << "/frameOffset";
-		cout << "saving offset to: " << ss.str() << endl;
-		std::ofstream finalfi(ss.str());
-		finalfi << "offset: " << baseOffset + extraOffset << endl << endl;
-		finalfi << "numVidFrames: " << numVidFrames << endl;
-		finalfi << "numMocapFrames: " << numMocapFrames << endl;
-		finalfi << "baseOffset: " << numMocapFrames - numVidFrames << endl;
-		finalfi << "extraOffset: " << extraOffset << endl << endl << endl;
-		finalfi << "--- info ---" << endl;
-		finalfi << "mocap frame = video frame + offset" << endl;
-		finalfi << "numVidFrames is number of video frames in sequence" << endl;
-		finalfi << "numMocapFrames is number of mocap frames in sequence" << endl;
-		finalfi << "baseOffset = numMocapFrames - numVidFrames (in theory, both stop at the same time)" << endl;
-		finalfi << "extraOffset = offset - baseOffset (there's a chance this might be constant between trials)" << endl;
-		finalfi << endl;
-		finalfi << "!!! Guessed offset from a fairly typical -7 extra offset !!!" << endl;
-		finalfi.close();
-		
-		throw std::runtime_error( "Can't recognise name of LED marker in any loaded .c3d files, and no other marker tracks to guess with. " );
 	}
 	
+	
+// 	std::ofstream tst("chtst");
+// 	tst << data.channels << endl << endl;
 	
 	
 	
@@ -299,25 +311,32 @@ int main(int argc, char* argv[])
 	//
 	// Find out the basic non-origin location of the "blinky" marker.
 	//
-	
-	std::vector<float> xs, ys, zs;
-	for( unsigned fc = 0; fc < data.tracks[ledName].cols(); ++fc )
-	{
-		hVec3D b = data.tracks[ledName].col(fc).head(4);
-		if( b(0) != 0 && b(1) != 0 && b(2) != 0 )
-		{
-			xs.push_back( b(0) );
-			ys.push_back( b(1) );
-			zs.push_back( b(2) );
-		}
-	}
-	std::sort( xs.begin(), xs.end() );
-	std::sort( ys.begin(), ys.end() );
-	std::sort( zs.begin(), zs.end() );
-	
 	hVec3D blinky;
-	blinky << xs[ xs.size()/2 ], ys[ys.size()/2], zs[zs.size()/2], 1.0f;
-	cout << "blinky mean position: " << blinky.transpose() << endl;
+	if( data.useChannel < 0 )
+	{
+		std::vector<float> xs, ys, zs;
+		for( unsigned fc = 0; fc < data.tracks[ledName].cols(); ++fc )
+		{
+			hVec3D b = data.tracks[ledName].col(fc).head(4);
+			if( b(0) != 0 && b(1) != 0 && b(2) != 0 )
+			{
+				xs.push_back( b(0) );
+				ys.push_back( b(1) );
+				zs.push_back( b(2) );
+			}
+		}
+		std::sort( xs.begin(), xs.end() );
+		std::sort( ys.begin(), ys.end() );
+		std::sort( zs.begin(), zs.end() );
+		
+
+		blinky << xs[ xs.size()/2 ], ys[ys.size()/2], zs[zs.size()/2], 1.0f;
+		cout << "blinky mean position: " << blinky.transpose() << endl;
+	}
+	else
+	{
+		blinky = data.flasherPos;
+	}
 	
 	//
 	// OK, it will be a very subtle signal, but here's the plan.
@@ -411,6 +430,15 @@ int main(int argc, char* argv[])
 				{
 					for( auto sidi = data.sources.begin(); sidi != data.sources.end(); ++sidi )
 						done = done || !sidi->second->Advance();
+				}
+				
+				if( camChange != 0 )
+				{
+					if( camChange > 0 && cind < ind2id.size()-1 )
+						++cind;
+					else if( camChange < 0 && cind > 0 )
+						--cind;
+					camChange = 0;
 				}
 			}
 			else
@@ -510,26 +538,24 @@ int main(int argc, char* argv[])
 		Rendering::ShowImage(bd, 1500);
 	
 	//
-	// We know that the LEDs are on for 100 ms. At 200 fps each frame is 5 ms, so we're
-	// expecting the LED to be on for 20 frames.
+	// We don't know how long each LED is on for, so how shall we find the frames where
+	// the light switches on?
 	//
-	// Consider the signal ___|^^^|___|^^^|___ (3 off, 3 on, 3 off, 3 on...)
-	// If we convolve with ___|^^^|___
-	// we should get       ____|^|_____|^|____ (except a lot more blurry)
+	// Convolution of the light signal with a simple filter should give us an answer...
 	//
-	Eigen::VectorXf filter(60);
-	for( unsigned cc = 0; cc < 60; ++cc )
+	Eigen::VectorXf filter(30);
+	for( unsigned cc = 0; cc < filter.rows(); ++cc )
 	{
-		if( cc < 20 || cc >= 40 ) filter(cc) = 0.0f;
+		if( cc < filter.rows()/2 ) filter(cc) = -1.0f;
 		else filter(cc) = 1.0f;
 	}
 	genMatrix bd2 = genMatrix::Zero( brightData.rows(), brightData.cols() );
-	for( unsigned cc = 0; cc < brightData.cols() - 60; ++cc )
+	for( unsigned cc = 0; cc < brightData.cols() - filter.rows(); ++cc )
 	{
 		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
 		{
-			Eigen::VectorXf w = brightData.block(rc,cc, 1, 60).transpose();
-			bd2(rc,cc+20) = (w.array() * filter.array()).sum() / 60.0f;       // cc+20 so we line up with the start of a flash.
+			Eigen::VectorXf w = brightData.block(rc,cc, 1, filter.rows()).transpose();
+			bd2(rc,cc+filter.rows()/2) = (w.array() * filter.array()).sum() / (float)filter.rows();  // cc+filter.rows()/2 so that signal peaks on the event
 		}
 	}
 	
@@ -556,10 +582,10 @@ int main(int argc, char* argv[])
 	genMatrix bd2g = bd2;
 	
 	Eigen::VectorXf gscv;
-	for(unsigned rpt = 0; rpt < 3; ++rpt )
+	float numRpt = 3.0f;
+	for(unsigned rpt = 0; rpt < numRpt; ++rpt )
 	{
-		// set the gaussian filter for this repeat.
-		// (have played with the idea that sigma changes on each repeat - getting smaller)
+		// create the gaussian filter.
 		for( unsigned cc = 0; cc < 60; ++cc )
 		{
 			float x = cc - 30.0;
@@ -578,93 +604,29 @@ int main(int argc, char* argv[])
 				Eigen::VectorXf w = bd2g.block(rc,cc, 1, 60).transpose();
 				gscv(cc+30) += (w.array() * gfilter.array()).sum()/gsc;
 			}
-		}
-		gscv /= gscv.maxCoeff();
-		
-		std::ofstream tstfi1("gscv-tst");
-		for( unsigned rc = 0; rc < gscv.rows(); ++rc )
-		{
-			tstfi1 << gscv(rc) << " ";
-		}
-		tstfi1 << endl;
-		tstfi1.close();
-		cout << "gscv mx: " << gscv.maxCoeff() << endl;
-// 		exit(0);
-		
-		// boost the local contrast of gscv to keep all real peaks nice and bright.
-		Eigen::VectorXf cfilter = Eigen::VectorXf::Zero(60);
-		for( unsigned cc = 20; cc < 40; ++cc )
-		{
-			cfilter(cc) = 1.0f;
-		}
-		float csc = cfilter.array().sum();
-		
-		Eigen::VectorXf gscv2 = Eigen::VectorXf::Zero(brightData.cols());
-		for( unsigned cc = 0; cc < brightData.cols() - 60; ++cc )
-		{
-			Eigen::VectorXf w = gscv.block(cc,0,60,1);
-			gscv2(cc+30) = (w.array() * cfilter.array()).sum()/csc;
+			gscv(cc+30) /= brightData.rows();
 		}
 		
-		gscv2 = gscv - gscv2;
-		gscv = gscv +  gscv2;
-		gscv /= gscv.maxCoeff();
 		
-		
-		// try to make the peaks of gscv more even valued.
-		gscv2 = Eigen::VectorXf::Zero( brightData.cols() );
-		int ww = 80;
-		for( unsigned rc = 0; rc < gscv.rows()-ww; ++rc )
-		{
-			Eigen::VectorXf w = gscv.block(rc,0,ww,1);
-			float wmx = w.maxCoeff();
-			if( wmx > 0.3 )
-				gscv2(rc+ww/2) = gscv(rc+ww/2) / wmx;
-			else
-				gscv2(rc+ww/2) = gscv(rc+ww/2);
-		}
-		gscv = gscv2;// /= gscv.maxCoeff();
-		
-		cout << "gscv mx: " << gscv.maxCoeff() << endl;
-		cout << "bd2g mx: " << bd2g.maxCoeff() << endl;
-		
-		
+		//
+		// Then push each viewpoint towards that filtered mean
+		//
 		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
 		{
-			//bd2g.row(rc) =  bd2g.row(rc).array() * gscv.array();
 			for( unsigned cc = 0; cc < brightData.cols(); ++cc )
 			{
-				bd2g(rc,cc) *= gscv(cc);
+				// too lazy to do this properly.
+				bd2g(rc,cc) = (numRpt-1.0)/numRpt * bd2g(rc,cc)  + 1.0/numRpt * gscv(cc);
 			}
+// 			bd2g.row(rc) =  * bd2g.row(rc) + 1.0/numRpt * gscv;
 		}
-		bd2g /= bd2g.maxCoeff();
+		
+		
+
 		
 	}
 	
-	bd = cv::Mat( 2*brightData.rows()*10, brightData.cols(), CV_32FC1, cv::Scalar(0.0f) );
-	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-	{
-		for( unsigned cc = 0; cc < brightData.cols(); ++cc )
-		{
-			for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
-			{
-				float &p = bd.at<float>( rc*10 + rc2, cc );
-				//p = bd2g(rc,cc);
-				p = gscv(cc);
-			}
-		}
-	}
-	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-	{
-		for( unsigned cc = 0; cc < brightData.cols(); ++cc )
-		{
-			for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
-			{
-				float &p = bd.at<float>( brightData.rows()*10 + rc*10 + rc2, cc );
-				p = bd2g(rc,cc);
-			}
-		}
-	}
+
 	if( data.visualise )
 	{
 		std::ofstream tstfi1("bd2g-tst");
@@ -681,7 +643,7 @@ int main(int argc, char* argv[])
 	}
 	
 	
-
+	
 	
 	
 	
@@ -692,16 +654,17 @@ int main(int argc, char* argv[])
 	// as well as a local peak filter.
 	//
 	genMatrix bd3 = genMatrix::Zero( brightData.rows(), brightData.cols() );
+	float thr = (bd2g.mean() + bd2g.maxCoeff()) / 2.0f;
+	cout << "bd2g m, mn, M: " << bd2g.minCoeff() << " " << bd2g.mean() << " " << bd2g.maxCoeff() << endl;
 	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
 	{
 		for( unsigned cc = 20; cc < brightData.cols() - 20; ++cc )
 		{
 			Eigen::VectorXf w = bd2g.block(rc,cc-10, 1, 20).transpose();
 			if(
-			    bd2g(rc,cc)> 0.005          && 
+			    bd2g(rc,cc) > thr            && 
 			    bd2g(rc,cc) > bd2g(rc,cc-1) &&
-				bd2g(rc,cc) > bd2g(rc,cc+1) &&
-			    gscv(cc) > 0.3 
+			    bd2g(rc,cc) > bd2g(rc,cc+1) 
 			  )
 			{
 				bd3(rc,cc) = 1.0f;
@@ -825,8 +788,9 @@ int main(int argc, char* argv[])
 	
 	//
 	// And just like that, we have found the start of our flashes (assuming I lined up my convolutions correctly)
+	// except - I think I'm finding the _ends_ of my flashes too. Do I want that?
 	//
-	std::vector<int> flashStarts;
+	std::vector<float> flashStarts;
 	for( unsigned cc = 0; cc < bd4.cols(); ++cc )
 	{
 		if( bd4(0,cc) == 1.0f )
@@ -852,16 +816,49 @@ int main(int argc, char* argv[])
 	//
 	
 	// find the mocap blinky starts.
-	std::vector<int> blinkyStarts;
-	for( unsigned cc = 0; cc < data.tracks[ledName].cols()-1; ++cc )
+	std::vector<float> blinkyStarts;
+	if( data.useChannel < 0 )
 	{
-		Eigen::VectorXf c0 = data.tracks[ledName].col(cc);
-		Eigen::VectorXf c1 = data.tracks[ledName].col(cc+1);
-		
-		if( c0(0) == 0.0f && c0(1) == 0.0f && c0(2) == 0.0f &&
-		   (c1(0) != 0.0f && c1(1) != 0.0f && c1(2) != 0.0f)  )
+		for( unsigned cc = 0; cc < data.tracks[ledName].cols()-1; ++cc )
 		{
-			blinkyStarts.push_back(cc);
+			Eigen::VectorXf c0 = data.tracks[ledName].col(cc);
+			Eigen::VectorXf c1 = data.tracks[ledName].col(cc+1);
+			
+			if( c0(0) == 0.0f && c0(1) == 0.0f && c0(2) == 0.0f &&
+			(c1(0) != 0.0f && c1(1) != 0.0f && c1(2) != 0.0f)  )
+			{
+				blinkyStarts.push_back(cc);
+			}
+		}
+	}
+	else
+	{
+		// what is the mean value of the channel?
+		// I _think_ the channel goes -ve for on, near 0 for off.
+		Eigen::VectorXf blinkData = data.channels.row( data.useChannel );
+		float mn = blinkData.mean();
+		
+		cout << "blinkData m, mn, M: " << blinkData.minCoeff() << " " << blinkData.mean() << " " << blinkData.maxCoeff() << endl;
+		std::ofstream tst("chtst");
+		for( unsigned cc = 0; cc < data.channels.cols()-1; ++cc )
+		{
+			float v0 = data.channels( data.useChannel, cc   );
+			float v1 = data.channels( data.useChannel, cc+1 );
+			tst << cc << " : " << std::setw(8) << v0 << " " << std::setw(8) << v1;
+			if( v0 > mn && v1 < mn )
+			{
+				blinkyStarts.push_back(cc);
+				tst << " <---";
+			}
+			tst  << endl;
+		}
+		
+		// there's a further complication in that the analog signal is 
+		// at a faster framerate than the video.
+		float sc = data.channels.cols() / minElements;
+		for( unsigned bsc = 0; bsc < blinkyStarts.size(); ++bsc )
+		{
+			blinkyStarts[bsc] /= sc;
 		}
 	}
 	
@@ -901,7 +898,7 @@ int main(int argc, char* argv[])
 	//
 	
 	// which set of flahses is shorter?
-	std::vector<int> *inner, *outer;
+	std::vector<float> *inner, *outer;
 	if( blinkyStarts.size() < flashStarts.size() )
 	{
 		inner = &blinkyStarts;
@@ -1048,7 +1045,7 @@ int main(int argc, char* argv[])
 		}
 		
 		
-		if( errs.size() > 3 )
+		if( errs.size() >= 2 )
 		{
 			// we want a somewhat robust error - is median enough?
 			std::sort( errs.begin(), errs.end() );
@@ -1296,6 +1293,15 @@ void ParseConfig( std::string configFile, SData &data )
 			std::stringstream ss;
 			ss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) trkfs[tfc];
 			data.trackFiles.push_back( ss.str() );
+		}
+		
+		data.useChannel = -1;
+		if( cfg.exists("useChannel") )
+		{
+			data.useChannel = cfg.lookup("useChannel");
+			libconfig::Setting &flasherPosSetting = cfg.lookup("flasherPos");
+			assert( flasherPosSetting.getLength() == 4 );
+			data.flasherPos << flasherPosSetting[0], flasherPosSetting[1], flasherPosSetting[2], flasherPosSetting[3];
 		}
 		
 		if( cfg.exists("visualise") )
