@@ -44,7 +44,7 @@ struct SData
 	int useChannel;
 	hVec3D flasherPos;
 	
-	
+	float lowMedian, highMedian;
 	
 	bool visualise;
 	bool usePrevious;
@@ -370,13 +370,21 @@ int main(int argc, char* argv[])
 	int camChange = 0;
 	int frameAdvance = 0;
 	int fc0 = 0;
+	std::shared_ptr<Rendering::MeshNode> tstNode;
 	std::vector< std::vector<float> > meanBrights;
 	genMatrix brightData;
 	if( !data.usePrevious )
 	{
 		cout << "playing through video data to learn light pattern..." << endl;
 		cout << "takes a wee-while normally" << endl;
-		while(!done)
+		cv::Mat tst(4, data.sources.begin()->second->GetNumImages(), CV_32FC3, cv::Scalar(0) );
+		if( data.visualise )
+		{
+			tstNode  = Rendering::GenerateImageNode(0,   0, img.cols, 50, tst, "tstNode" , ren);
+			ren->Get2dFgRoot()->AddChild( tstNode );
+			tstNode->GetTexture()->UploadImage(    tst      );
+		}
+		while(!done && fc0 < tst.cols )
 		{
 			if( fc0 % 30 == 0 )
 				cout << fc0 << " / " << data.sources.begin()->second->GetNumImages() << endl;
@@ -403,6 +411,17 @@ int main(int argc, char* argv[])
 						
 						bright += (p[0] + p[1] + p[2]) / 3.0f;
 						
+						if( sidi == data.sources.begin() )
+						{
+							tst.at<cv::Vec3f>(0, fc0)[0] += p[0];
+							tst.at<cv::Vec3f>(1, fc0)[1] += p[1];
+							tst.at<cv::Vec3f>(2, fc0)[2] += p[2];
+							
+							tst.at<cv::Vec3f>(3, fc0)[0] += bright;
+							tst.at<cv::Vec3f>(3, fc0)[1] += bright;
+							tst.at<cv::Vec3f>(3, fc0)[2] += bright;
+							tst.at<cv::Vec3f>(3, fc0) /= 3.0f;
+						}
 					}
 				}
 				bright /= 32*32;
@@ -410,6 +429,20 @@ int main(int argc, char* argv[])
 				brights[ id2ind[ sidi->first ] ] = bright;
 			}
 			meanBrights.push_back( brights );
+			
+			if( data.visualise )
+			{
+				float n = 255 * (32*32);
+				tst.at<cv::Vec3f>(0, fc0)[0] /= n;
+				tst.at<cv::Vec3f>(1, fc0)[1] /= n;
+				tst.at<cv::Vec3f>(2, fc0)[2] /= n;
+				
+				tst.at<cv::Vec3f>(3, fc0)[0] /=n;
+				tst.at<cv::Vec3f>(3, fc0)[1] /=n;
+				tst.at<cv::Vec3f>(3, fc0)[2] /=n;
+				tstNode->GetTexture()->UploadImage(    tst      );
+			}
+			
 			
 			//
 			// Draw the blinking LED.
@@ -423,7 +456,9 @@ int main(int argc, char* argv[])
 				ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
 				
 				hVec2D bcp = calib.Project( blinky );
-				cv::circle( img, cv::Point( bcp(0), bcp(1) ), 15, cv::Scalar(255,255,0), 2 );
+				//cv::circle( img, cv::Point( bcp(0), bcp(1) ), 15, cv::Scalar(255,255,0), 2 );
+				cv::rectangle( img, cv::Rect( bcp(0)-16, bcp(1)-16, 32, 32 ), cv::Scalar(255,255,0), 2 );
+				
 				
 				
 				ren->SetBGImage(img);
@@ -485,7 +520,7 @@ int main(int argc, char* argv[])
 			std::vector<float> rowVals( brightData.cols() );
 			Eigen::Map< Eigen::Matrix<float, 1, Eigen::Dynamic> > (&rowVals[0], 1, brightData.cols()) = brightData.row(rc);
 			std::sort( rowVals.begin(), rowVals.end() );
-			float md = rowVals[ rowVals.size()/2 ];
+			float md = rowVals[ 0.25*rowVals.size() ]; //rowVals[ rowVals.size()/2 ];
 			float tq = rowVals[ 0.75*rowVals.size() ];
 			brightData.row(rc).array() -= md;
 			brightData.row(rc).array() /= (tq-md);
@@ -970,109 +1005,119 @@ int main(int argc, char* argv[])
 		
 		cout << "---- " << i << " ---- " << endl;
 		
-		cout << "inner0 (" << inner0.size() << "): ";
-		for( unsigned c = 0; c < inner0.size(); ++c )
+		if( outer0.size() > 0 )
 		{
-			cout << inner0[c] << " ";
-		}
-		cout << endl;
-		
-		cout << "outer0 (" << outer0.size() << "): ";
-		for( unsigned c = 0; c < outer0.size(); ++c )
-		{
-			cout << outer0[c] << " ";
-		}
-		cout << endl;
-		
-		cout << "inner0 per: ";
-		for( unsigned c = 0; c < inner0.size()-1; ++c )
-		{
-			cout << inner0[c+1] - inner0[c] << " ";
-		}
-		cout << endl;
-		
-		cout << "outer0 per: ";
-		for( unsigned c = 0; c < outer0.size()-1; ++c )
-		{
-			cout << outer0[c+1] - outer0[c] << " ";
-		}
-		cout << endl;
-		
-		// find the mutually best inner for each outer.
-		genMatrix E = genMatrix::Zero( inner0.size(), outer0.size() );
-		for( unsigned ic = 0; ic < inner0.size(); ++ic )
-		{
-			for( unsigned oc = 0; oc < outer0.size(); ++oc )
-			{
-				E( ic, oc ) = abs( inner0[ic] - outer0[oc] );
-			}
-		}
-		
-// 		cout << E << endl;
-		std::vector< int > i2o( inner0.size(), -1 );
-		int ic, oc;
-		float x = E.minCoeff(&ic, &oc);
-		while( x < 90000 )
-		{
-			i2o[ic] = oc;
-			for( unsigned oc2 = 0; oc2 < E.cols(); ++oc2 )
-				E(ic, oc2) = 90000;
-			for( unsigned ic2 = 0; ic2 < E.rows(); ++ic2 )
-				E(ic2, oc) = 90000;
-			x = E.minCoeff(&ic, &oc);
-		}
-		
-		
-		
-		// find the offsets implied by this location.
-		std::vector<int> curOffsets;
-		for( unsigned ic = 0; ic < i2o.size(); ++ic )
-		{
-			if( i2o[ic] >= 0 )
-			{
-				int offset = outer->at( i2o[ic] + std::max(i,0) ) - inner->at(ic);
-				cout << i2o[ic] << " " << inner0[ic] << " " << outer0[ i2o[ic] ] << "  off: " << offset << endl;
-				curOffsets.push_back( offset );
-			}
-			else
-			{
-				cout << i2o[ic] << " " << inner0[ic] << " " << outer0[ i2o[ic] ] << "  N/A" << endl;
-			}
-		}
-		
-		// find the median offset.
-		std::vector<int> cof2 = curOffsets;
-		std::sort( cof2.begin(), cof2.end() );
-		int medianOffset = cof2[ cof2.size()/2 ];
-		
-		// compute the errors
-		std::vector<int> errs;
-		for( unsigned oc = 0; oc < curOffsets.size(); ++oc )
-		{
-			int e = abs( curOffsets[oc] - medianOffset );
-			cout << curOffsets[oc] << " -> " << e << endl;
-			errs.push_back(e);
-		}
-		
-		
-		if( errs.size() >= 2 )
-		{
-			// we want a somewhat robust error - is median enough?
-			std::sort( errs.begin(), errs.end() );
-			float safeMedianErr = errs[ 0.75 * errs.size() ]; 
 			
-			if( safeMedianErr <= bestErr+2 ) // <= because we're looking for the last best alignment (so accept a slightly worse error if needs be)
+			cout << "inner0 (" << inner0.size() << "): ";
+			for( unsigned c = 0; c < inner0.size(); ++c )
 			{
-				bestErr = safeMedianErr;
-				bestInd = i;
-				offsets = curOffsets;
+				cout << inner0[c] << " ";
 			}
-			cout << safeMedianErr << " (" << bestErr << ") " << endl << endl << endl;
+			cout << endl;
+			
+			cout << "outer0 (" << outer0.size() << "): ";
+			for( unsigned c = 0; c < outer0.size(); ++c )
+			{
+				cout << outer0[c] << " ";
+			}
+			cout << endl;
+			
+			cout << "inner0 per: ";
+			for( unsigned c = 0; c < inner0.size()-1; ++c )
+			{
+				cout << inner0[c+1] - inner0[c] << " ";
+			}
+			cout << endl;
+			
+			cout << "outer0 per: ";
+			for( int c = 0; c < (int)outer0.size()-1; ++c )
+			{
+				cout << outer0[c+1] - outer0[c] << " ";
+			}
+			cout << endl;
+			
+			// find the mutually best inner for each outer.
+			genMatrix E = genMatrix::Zero( inner0.size(), outer0.size() );
+			for( unsigned ic = 0; ic < inner0.size(); ++ic )
+			{
+				for( unsigned oc = 0; oc < outer0.size(); ++oc )
+				{
+					E( ic, oc ) = abs( inner0[ic] - outer0[oc] );
+				}
+			}
+			
+	// 		cout << E << endl;
+			std::vector< int > i2o( inner0.size(), -1 );
+			int ic, oc;
+			float x = E.minCoeff(&ic, &oc);
+			while( x < 90000 )
+			{
+				i2o[ic] = oc;
+				for( unsigned oc2 = 0; oc2 < E.cols(); ++oc2 )
+					E(ic, oc2) = 90000;
+				for( unsigned ic2 = 0; ic2 < E.rows(); ++ic2 )
+					E(ic2, oc) = 90000;
+				x = E.minCoeff(&ic, &oc);
+			}
+			
+			
+			
+			// find the offsets implied by this location.
+			std::vector<int> curOffsets;
+			for( unsigned ic = 0; ic < i2o.size(); ++ic )
+			{
+				if( i2o[ic] >= 0 )
+				{
+					int offset = outer->at( i2o[ic] + std::max(i,0) ) - inner->at(ic);
+					cout << i2o[ic] << " " << inner0[ic] << " " << outer0[ i2o[ic] ] << "  off: " << offset << endl;
+					curOffsets.push_back( offset );
+				}
+				else
+				{
+					cout << i2o[ic] << " " << inner0[ic] << " " << outer0[ i2o[ic] ] << "  N/A" << endl;
+				}
+			}
+			
+			// find the median offset.
+			std::vector<int> cof2 = curOffsets;
+			std::sort( cof2.begin(), cof2.end() );
+			int medianOffset = cof2[ cof2.size()/2 ];
+			
+			// compute the errors
+			std::vector<int> errs;
+			for( unsigned oc = 0; oc < curOffsets.size(); ++oc )
+			{
+				int e = abs( curOffsets[oc] - medianOffset );
+				cout << curOffsets[oc] << " -> " << e << endl;
+				errs.push_back(e);
+			}
+			
+			
+			if( errs.size() >= 2 )
+			{
+				// we want a somewhat robust error - is median enough?
+				std::sort( errs.begin(), errs.end() );
+				float safeMedianErr = errs[ 0.75 * errs.size() ]; 
+				
+				if( safeMedianErr <= bestErr+2 ) // <= because we're looking for the last best alignment (so accept a slightly worse error if needs be)
+				{
+					bestErr = safeMedianErr;
+					bestInd = i;
+					offsets = curOffsets;
+				}
+				cout << safeMedianErr << " (" << bestErr << ") " << endl << endl << endl;
+			}
+			
+			done = ( inner0.back() - outer0.back() ) > data.extraFrameOverlap;
 		}
-		
+		else
+		{
+			cout << " -- not possible " << endl;
+			done = true; // ?
+		}
 		
 		++i;
-		done = ( inner0.back() - outer0.back() ) > data.extraFrameOverlap;
+		
 	}
 	
 	
@@ -1296,6 +1341,20 @@ void ParseConfig( std::string configFile, SData &data )
 			}
 		}
 		
+		
+		data.lowMedian = 0.25;
+		if( cfg.exists("lowMedian") )
+		{
+			data.lowMedian = cfg.lookup("lowMedian");
+		}
+		data.highMedian = 0.75;
+		if( cfg.exists("highMedian") )
+		{
+			data.highMedian = cfg.lookup("highMedian");
+		}
+		
+		assert( data.lowMedian >= 0 && data.lowMedian < data.highMedian );
+		assert( data.highMedian > 0 && data.highMedian > data.lowMedian && data.highMedian <= 1.0f );
 		
 		libconfig::Setting &trkfs = cfg.lookup("trackFiles");
 		for( unsigned tfc = 0; tfc < trkfs.getLength(); ++tfc )

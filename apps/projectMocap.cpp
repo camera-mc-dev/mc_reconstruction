@@ -224,8 +224,8 @@ int main(int argc, char* argv[])
 	}
 	cout << "min elements: " << minElements << endl;
 	
-	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << endl;
-	if( data.channels.rows() > 0 && data.channels.cols() < 0 )
+	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << " with max value: " << data.channels.maxCoeff() << endl;
+	if( data.channels.rows() > 0 && data.channels.cols() > 0 )
     {
 		// let's turn the channels data into a simple heatmap.
 		// I want there to be as many rows of this image as there are _video_ frames, except multiplied by
@@ -249,6 +249,7 @@ int main(int argc, char* argv[])
 			}
 		}
 		data.channelsHeatmap = hmch;
+		SaveImage( hmch, "channelsMap.jpg" );
 	}
 	else
 	{
