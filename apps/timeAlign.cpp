@@ -57,6 +57,136 @@ void ParseConfig( std::string configFile, SData &data );
 void GetSources( SData &data );
 
 
+void FilterFlashOn(genMatrix brightData, genMatrix &out )
+{
+	Eigen::VectorXf filter(30);
+	for( unsigned cc = 0; cc < filter.rows(); ++cc )
+	{
+		if( cc < filter.rows()/2 ) filter(cc) = -1.0f;
+		else filter(cc) = 1.0f;
+	}
+	out = genMatrix::Zero( brightData.rows(), brightData.cols() );
+	for( unsigned cc = 0; cc < brightData.cols() - filter.rows(); ++cc )
+	{
+		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
+		{
+			Eigen::VectorXf w = brightData.block(rc,cc, 1, filter.rows()).transpose();
+			out(rc,cc+filter.rows()/2) = (w.array() * filter.array()).sum() / (float)filter.rows();  // cc+filter.rows()/2 so that signal peaks on the event
+		}
+	}
+	
+}
+void FilterFlashOff(genMatrix brightData, genMatrix &out )
+{
+	Eigen::VectorXf filter(30);
+	for( unsigned cc = 0; cc < filter.rows(); ++cc )
+	{
+		if( cc < filter.rows()/2 ) filter(cc) = 1.0f;
+		else filter(cc) = -1.0f;
+	}
+	out = genMatrix::Zero( brightData.rows(), brightData.cols() );
+	for( unsigned cc = 0; cc < brightData.cols() - filter.rows(); ++cc )
+	{
+		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
+		{
+			Eigen::VectorXf w = brightData.block(rc,cc, 1, filter.rows()).transpose();
+			out(rc,cc+filter.rows()/2) = (w.array() * filter.array()).sum() / (float)filter.rows();  // cc+filter.rows()/2 so that signal peaks on the event
+		}
+	}
+}
+
+void CrossViewFilter( genMatrix inData, genMatrix &out )
+{
+	Eigen::VectorXf gfilter(60);
+	out = inData;
+	
+	Eigen::VectorXf gscv;
+	float numRpt = 10.0f;
+	for(unsigned rpt = 0; rpt < numRpt; ++rpt )
+	{
+		// create the gaussian filter.
+		for( unsigned cc = 0; cc < 60; ++cc )
+		{
+			float x = cc - 30.0;
+			float sig = 5.0f; //(11-rpt);
+			gfilter(cc) = exp( -(x*x)/(sig*sig)  );
+			cout << std::setw(6) << std::fixed << std::setprecision(2) << gfilter(cc);
+		}
+		float gsc = gfilter.array().sum();
+		
+		// Apply the gaussian filter to get our 1D response
+		gscv = Eigen::VectorXf::Zero(inData.cols());
+		for( unsigned cc = 0; cc < inData.cols() - 60; ++cc )
+		{
+			for( unsigned rc = 0; rc < inData.rows(); ++rc )
+			{
+				Eigen::VectorXf w = out.block(rc,cc, 1, 60).transpose();
+				gscv(cc+30) += (w.array() * gfilter.array()).sum()/gsc;
+			}
+			gscv(cc+30) /= inData.rows();
+		}
+		
+		
+		//
+		// Then push each viewpoint towards that filtered mean
+		//
+		for( unsigned rc = 0; rc < inData.rows(); ++rc )
+		{
+			for( unsigned cc = 0; cc < inData.cols(); ++cc )
+			{
+				// too lazy to do this properly.
+				//out(rc,cc) = (numRpt-1.0)/numRpt * out(rc,cc)  + 1.0/numRpt * gscv(cc);
+				out(rc,cc) = 0.5 * out(rc,cc)  + 0.5 * gscv(cc);
+			}
+		}
+	}
+}
+
+void PeakDetect( genMatrix inData, genMatrix &out )
+{
+	out = genMatrix::Zero( inData.rows(), inData.cols() );
+	float thr = (inData.mean() + inData.maxCoeff()) / 2.0f;
+	cout << "inData m, mn, M: " << inData.minCoeff() << " " << inData.mean() << " " << inData.maxCoeff() << endl;
+	for( unsigned rc = 0; rc < inData.rows(); ++rc )
+	{
+		for( unsigned cc = 20; cc < inData.cols() - 20; ++cc )
+		{
+			Eigen::VectorXf w = inData.block(rc,cc-10, 1, 20).transpose();
+			if(
+			    inData(rc,cc) > thr            && 
+			    inData(rc,cc) > inData(rc,cc-1) &&
+			    inData(rc,cc) > inData(rc,cc+1) 
+			  )
+			{
+				out(rc,cc) = 1.0f;
+			}
+		}
+	}
+}
+
+
+void PeakCheck( genMatrix inData, genMatrix &out )
+{
+	out = genMatrix::Zero( inData.rows(), inData.cols() );
+	for( unsigned cc = 0; cc < inData.cols(); ++cc )
+	{
+		int c = 0;
+		for( unsigned rc = 0; rc < inData.rows(); ++rc )
+		{
+			if( inData(rc,cc) == 1.0f )
+				++c;
+		}
+		if( c > inData.rows() / 2 )
+		{
+			for( unsigned rc = 0; rc < inData.rows(); ++rc )
+			{
+				out(rc,cc) = 1.0f;
+			}
+		}
+	}
+}
+
+
 class AlignRenderer : public Rendering::BasicRenderer
 {
 	friend class Rendering::RendererFactory;
@@ -586,31 +716,24 @@ int main(int argc, char* argv[])
 	//
 	// Convolution of the light signal with a simple filter should give us an answer...
 	//
-	Eigen::VectorXf filter(30);
-	for( unsigned cc = 0; cc < filter.rows(); ++cc )
-	{
-		if( cc < filter.rows()/2 ) filter(cc) = -1.0f;
-		else filter(cc) = 1.0f;
-	}
-	genMatrix bd2 = genMatrix::Zero( brightData.rows(), brightData.cols() );
-	for( unsigned cc = 0; cc < brightData.cols() - filter.rows(); ++cc )
-	{
-		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-		{
-			Eigen::VectorXf w = brightData.block(rc,cc, 1, filter.rows()).transpose();
-			bd2(rc,cc+filter.rows()/2) = (w.array() * filter.array()).sum() / (float)filter.rows();  // cc+filter.rows()/2 so that signal peaks on the event
-		}
-	}
+	genMatrix bd2On, bd2Off;
+	FilterFlashOn( brightData, bd2On );
+	FilterFlashOff( brightData, bd2Off );
 	
 	bd = cv::Mat( brightData.rows()*10, brightData.cols(), CV_32FC1, cv::Scalar(0.0f) );
 	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
 	{
 		for( unsigned cc = 0; cc < brightData.cols(); ++cc )
 		{
-			for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
+			for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
 			{
 				float &p = bd.at<float>( rc*10 + rc2, cc );
-				p = bd2(rc,cc);
+				p = bd2On(rc,cc);
+			}
+			for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
+			{
+				float &p = bd.at<float>( rc*10 + rc2, cc );
+				p = bd2Off(rc,cc);
 			}
 		}
 	}
@@ -621,66 +744,27 @@ int main(int argc, char* argv[])
 	//
 	// If we gaussian filter across time using all the views, we can create cross-view consistency (?)
 	// 
-	Eigen::VectorXf gfilter(60);
-	genMatrix bd2g = bd2;
+	genMatrix bd2OnG, bd2OffG;
+	CrossViewFilter( bd2On, bd2OnG );
+	CrossViewFilter( bd2Off, bd2OffG );
 	
-	Eigen::VectorXf gscv;
-	float numRpt = 10.0f;
-	for(unsigned rpt = 0; rpt < numRpt; ++rpt )
-	{
-		// create the gaussian filter.
-		for( unsigned cc = 0; cc < 60; ++cc )
-		{
-			float x = cc - 30.0;
-			float sig = 5.0f; //(11-rpt);
-			gfilter(cc) = exp( -(x*x)/(sig*sig)  );
-			cout << std::setw(6) << std::fixed << std::setprecision(2) << gfilter(cc);
-		}
-		float gsc = gfilter.array().sum();
-		
-		// Apply the gaussian filter to get our 1D response
-		gscv = Eigen::VectorXf::Zero(brightData.cols());
-		for( unsigned cc = 0; cc < brightData.cols() - 60; ++cc )
-		{
-			for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-			{
-				Eigen::VectorXf w = bd2g.block(rc,cc, 1, 60).transpose();
-				gscv(cc+30) += (w.array() * gfilter.array()).sum()/gsc;
-			}
-			gscv(cc+30) /= brightData.rows();
-		}
-		
-		
-		//
-		// Then push each viewpoint towards that filtered mean
-		//
-		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-		{
-			for( unsigned cc = 0; cc < brightData.cols(); ++cc )
-			{
-				// too lazy to do this properly.
-				//bd2g(rc,cc) = (numRpt-1.0)/numRpt * bd2g(rc,cc)  + 1.0/numRpt * gscv(cc);
-				bd2g(rc,cc) = 0.5 * bd2g(rc,cc)  + 0.5 * gscv(cc);
-			}
-// 			bd2g.row(rc) =  * bd2g.row(rc) + 1.0/numRpt * gscv;
-		}
-		
-		
-
-		
-	}
 	
-
+	
 	if( data.visualise )
 	{
-		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
+		for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
 		{
-			for( unsigned cc = 0; cc < brightData.cols(); ++cc )
+			for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
 			{
-				for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
+				for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
 				{
 					float &p = bd.at<float>( rc*10 + rc2, cc );
-					p = bd2g(rc,cc);
+					p = bd2OnG(rc,cc);
+				}
+				for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
+				{
+					float &p = bd.at<float>( rc*10 + rc2, cc );
+					p = bd2OffG(rc,cc);
 				}
 			}
 		}
@@ -698,451 +782,252 @@ int main(int argc, char* argv[])
 	// Now we find the brightness peaks. They should be strong enough that we can make use of a threshold
 	// as well as a local peak filter.
 	//
-	genMatrix bd3 = genMatrix::Zero( brightData.rows(), brightData.cols() );
-	float thr = (bd2g.mean() + bd2g.maxCoeff()) / 2.0f;
-	cout << "bd2g m, mn, M: " << bd2g.minCoeff() << " " << bd2g.mean() << " " << bd2g.maxCoeff() << endl;
-	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-	{
-		for( unsigned cc = 20; cc < brightData.cols() - 20; ++cc )
-		{
-			Eigen::VectorXf w = bd2g.block(rc,cc-10, 1, 20).transpose();
-			if(
-			    bd2g(rc,cc) > thr            && 
-			    bd2g(rc,cc) > bd2g(rc,cc-1) &&
-			    bd2g(rc,cc) > bd2g(rc,cc+1) 
-			  )
-			{
-				bd3(rc,cc) = 1.0f;
-			}
-		}
-	}
-	cout << "bd3 max: " << bd3.maxCoeff() << endl;
+	genMatrix peakOn, peakOff;
+	PeakDetect(  bd2OnG, peakOn );
+	PeakDetect( bd2OffG, peakOff );
 	
-	bd = cv::Mat( brightData.rows()*10, brightData.cols(), CV_32FC1, cv::Scalar(0.0f) );
-	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-	{
-		for( unsigned cc = 0; cc < brightData.cols(); ++cc )
-		{
-			for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
-			{
-				float &p = bd.at<float>( rc*10 + rc2, cc );
-				p = bd3(rc,cc);
-			}
-		}
-	}
+	
+	
 	if( data.visualise )
 	{
-		std::ofstream tstfi1("bd3-tst");
-		for( unsigned rc = 0; rc < bd3.rows(); ++rc )
+		for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
 		{
-			for( unsigned cc = 0; cc < bd3.cols(); ++cc )
+			for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
 			{
-				tstfi1 << bd3(rc,cc) << " ";
+				for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
+				{
+					float &p = bd.at<float>( rc*10 + rc2, cc );
+					p = peakOn(rc,cc);
+				}
+				for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
+				{
+					float &p = bd.at<float>( rc*10 + rc2, cc );
+					p = peakOff(rc,cc);
+				}
 			}
-			tstfi1 << endl;
 		}
-		tstfi1.close();
 		Rendering::ShowImage(bd, 1500);
 	}
+	
 	
 	//
 	// Now we use the multiple cameras to get robustness with a simple count.
 	//
-	genMatrix bd4 = genMatrix::Zero( brightData.rows(), brightData.cols() );
-	for( unsigned cc = 0; cc < brightData.cols(); ++cc )
-	{
-		int c = 0;
-		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-		{
-			if( bd3(rc,cc) == 1.0f )
-				++c;
-		}
-		if( c > brightData.rows() / 2 )
-		{
-			for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-			{
-				bd4(rc,cc) = 1.0f;
-			}
-		}
-	}
-	cout << "bd4 max: " << bd4.maxCoeff() << endl;
+	genMatrix peakOn2, peakOff2;
+	PeakCheck(  peakOn, peakOn2 );
+	PeakCheck( peakOff, peakOff2 );
 	
-	bd = cv::Mat( brightData.rows()*10, brightData.cols(), CV_32FC1, cv::Scalar(0.0f) );
-	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
+	
+	
+	if( data.visualise )
 	{
-		for( unsigned cc = 0; cc < brightData.cols(); ++cc )
+		for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
 		{
-			for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
+			for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
 			{
-				float &p = bd.at<float>( rc*10 + rc2, cc );
-				p = bd4(rc,cc);
+				for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
+				{
+					float &p = bd.at<float>( rc*10 + rc2, cc );
+					p = peakOn2(rc,cc);
+				}
+				for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
+				{
+					float &p = bd.at<float>( rc*10 + rc2, cc );
+					p = peakOff2(rc,cc);
+				}
 			}
 		}
+		Rendering::ShowImage(bd, 1500);
+	}
+	
+	
+	//
+	// I _really_ hate the ugly mess that I've used previously here, even though I know I've done a load 
+	// of work to make it robust - but it is kind of impenetrable and hard to update.
+	//
+	// So here's a new version! Take that previous Murray.
+	//
+	
+	
+	//
+	// Put those peaks into a simple signal.
+	//
+	genMatrix tmp = peakOn2 + -1.0 * peakOff2;
+	Eigen::VectorXf flashSignal( tmp.cols() );
+	for( unsigned c = 0; c < tmp.cols(); ++c )
+	{
+		flashSignal(c) = tmp.col(c).mean();
 	}
 	if( data.visualise )
+	{
+		for( unsigned rc = 0; rc < bd.rows; ++rc )
+		{
+			for( unsigned cc = 0; cc < bd.cols; ++cc )
+			{
+				float &p = bd.at<float>( rc, cc );
+				p = 0.5 + 0.5 * flashSignal(cc);
+			}
+		}
 		Rendering::ShowImage(bd, 1500);
-	
-	{
-		std::ofstream outfi("bd1.dat");
-		outfi << brightData.rows() << " " << brightData.cols() << endl;
-		for( unsigned rc = 0; rc < brightData.rows(); ++rc )
-		{
-			for( unsigned cc = 0; cc < brightData.cols(); ++cc )
-			{
-				outfi << brightData(rc,cc) << " ";
-			}
-			outfi << endl;
-		}
-	}
-	{
-		std::ofstream outfi("bd2.dat");
-		outfi << bd2.rows() << " " << bd2.cols() << endl;
-		for( unsigned rc = 0; rc < bd2.rows(); ++rc )
-		{
-			for( unsigned cc = 0; cc < bd2.cols(); ++cc )
-			{
-				outfi << bd2(rc,cc) << " ";
-			}
-			outfi << endl;
-		}
-	}
-	{
-		std::ofstream outfi("bd3.dat");
-		outfi << bd3.rows() << " " << bd3.cols() << endl;
-		for( unsigned rc = 0; rc < bd3.rows(); ++rc )
-		{
-			for( unsigned cc = 0; cc < bd3.cols(); ++cc )
-			{
-				outfi << bd3(rc,cc) << " ";
-			}
-			outfi << endl;
-		}
-	}
-	{
-		std::ofstream outfi("bd4.dat");
-		outfi << bd4.rows() << " " << bd4.cols() << endl;
-		for( unsigned rc = 0; rc < bd4.rows(); ++rc )
-		{
-			for( unsigned cc = 0; cc < bd4.cols(); ++cc )
-			{
-				outfi << bd4(rc,cc) << " ";
-			}
-			outfi << endl;
-		}
 	}
 	
 	//
-	// And just like that, we have found the start of our flashes (assuming I lined up my convolutions correctly)
-	// except - I think I'm finding the _ends_ of my flashes too. Do I want that?
+	// Now make the same kind of signal with "blinky"
 	//
-	std::vector<float> flashStarts;
-	for( unsigned cc = 0; cc < bd4.cols(); ++cc )
-	{
-		if( bd4(0,cc) == 1.0f )
-			flashStarts.push_back(cc);
-	}
-	
-	
-	//
-	// We know that the video _should_ align to the last n frames of the mocap data,
-	// where n is the number of video frames, which we know from the columns of bd.
-	//
-	int numVidFrames = brightData.cols();
-	int numMocapFrames = data.tracks.begin()->second.cols();
-	cout << numVidFrames << " " << numMocapFrames << endl;
-	int baseOffset = numMocapFrames - numVidFrames;
-	
-	
-	//
-	// So now we just have to set about figuring out an offset that aligns our 
-	// detected light flashes with the changing state of the "blinky" track.
-	//
-	// We can reasonably expect the extra time alignment to be in the range -40 to 40
-	//
-	
-	// find the mocap blinky starts.
-	std::vector<float> blinkyStarts;
+	Eigen::VectorXf blinkSignal;
 	if( data.useChannel < 0 )
 	{
+		blinkSignal = Eigen::VectorXf::Zero( data.tracks[ledName].cols() );
 		for( unsigned cc = 0; cc < data.tracks[ledName].cols()-1; ++cc )
 		{
 			Eigen::VectorXf c0 = data.tracks[ledName].col(cc);
 			Eigen::VectorXf c1 = data.tracks[ledName].col(cc+1);
 			
 			if( c0(0) == 0.0f && c0(1) == 0.0f && c0(2) == 0.0f &&
-			(c1(0) != 0.0f && c1(1) != 0.0f && c1(2) != 0.0f)  )
+			  ( c1(0) != 0.0f && c1(1) != 0.0f && c1(2) != 0.0f)  )
 			{
-				blinkyStarts.push_back(cc);
+				blinkSignal(cc) = 1.0f;
+			}
+			else if ( c0(0) != 0.0f && c0(1) != 0.0f && c0(2) != 0.0f &&
+			        ( c1(0) == 0.0f && c1(1) == 0.0f && c1(2) == 0.0f)  )
+			{
+				blinkSignal(cc) = -1.0f;
 			}
 		}
 	}
 	else
 	{
-		// what is the mean value of the channel?
+		// the analog signal is faster than the video signal, so need a scale for frame numbers.
+		float sc = data.channels.cols() / minElements;
+		
+		// this is the raw signal.
 		// I _think_ the channel goes -ve for on, near 0 for off.
 		Eigen::VectorXf blinkData = data.channels.row( data.useChannel );
-		float mn = blinkData.mean();
 		
-		cout << "blinkData m, mn, M: " << blinkData.minCoeff() << " " << blinkData.mean() << " " << blinkData.maxCoeff() << endl;
-		std::ofstream tst("chtst");
+		// what is the mean value of the channel?
+		float m  = blinkData.minCoeff();
+		float mn = blinkData.mean();
+		float M  = blinkData.maxCoeff();
+		cout << "blinkData m, mn, M: " << m << " " << mn << " " << M << endl;
+		
+		// init the blinkSignal.
+		blinkSignal = Eigen::VectorXf::Zero( blinkData.rows() / sc );
+		cout << blinkSignal.rows() << endl;
+		// fill the blink signal.
 		for( unsigned cc = 0; cc < data.channels.cols()-1; ++cc )
 		{
 			float v0 = data.channels( data.useChannel, cc   );
 			float v1 = data.channels( data.useChannel, cc+1 );
-			tst << cc << " : " << std::setw(8) << v0 << " " << std::setw(8) << v1;
+			
 			if( v0 > mn && v1 < mn )
 			{
-				blinkyStarts.push_back(cc);
-				tst << " <---";
+				blinkSignal(cc/sc) =  1.0f;
+				cout << " on: " << cc << " ( " << cc/sc << " ) " << endl;
 			}
-			tst  << endl;
+			if( v0 < mn && v1 > mn )
+			{
+				blinkSignal(cc/sc) = -1.0f;
+				cout << " off: " << cc << " ( " << cc/sc << " ) " << endl;
+			}
 		}
-		
-		// there's a further complication in that the analog signal is 
-		// at a faster framerate than the video.
-		float sc = data.channels.cols() / minElements;
-		for( unsigned bsc = 0; bsc < blinkyStarts.size(); ++bsc )
+	}
+	
+	cv::Mat bd2( 100, blinkSignal.rows(), CV_32FC1, cv::Scalar(0.0f) );
+	if( data.visualise )
+	{
+		for( unsigned rc = 0; rc < bd2.rows; ++rc )
 		{
-			blinkyStarts[bsc] /= sc;
+			for( unsigned cc = 0; cc < bd2.cols; ++cc )
+			{
+				float &p = bd2.at<float>( rc, cc );
+				p = 0.5 + 0.5 * blinkSignal(cc);
+			}
 		}
+		Rendering::ShowImage(bd2, 1500);
 	}
 	
 	
-	cout << "blink marker starts:" << endl;
-	for( unsigned i = 0; i < blinkyStarts.size(); ++i )
-	{
-		cout << blinkyStarts[i] << " ";
-	}
-	cout << endl;
-	
-	cout << "flash starts: " << endl;
-	for( unsigned i = 0; i < flashStarts.size(); ++i )
-	{
-		cout << flashStarts[i] << " ";
-	}
-	cout << endl;
-	
-	cout << "blink marker periods:" << endl;
-	for( unsigned i = 0; i < blinkyStarts.size()-1; ++i )
-	{
-		cout << blinkyStarts[i+1] - blinkyStarts[i]<< " ";
-	}
-	cout << endl;
-	
-	cout << "flash periods: " << endl;
-	for( unsigned i = 0; i < flashStarts.size()-1; ++i )
-	{
-		cout << flashStarts[i+1] - flashStarts[i] << " ";
-	}
-	cout << endl;
-	
-	
-	
+	// offset is:
+	// mocapFrame = vidFrame + offset
 	//
-	// Now we need to slide the shorter signal over the longer signal like a correlation and find the best alignment
+	// Make a 2 row matrix which is as long as if you concat the blink signal at the front and end of the 
+	// flash signal.
 	//
-	
-	// which set of flahses is shorter?
-	std::vector<float> *inner, *outer;
-	if( blinkyStarts.size() < flashStarts.size() )
+	// Make each element of the first row state its minimum distance to a flash start,
+	// and each element of the second row state its minimum distance to a flash end.
+	//
+	genMatrix bsp = genMatrix::Constant( 2, blinkSignal.rows() + flashSignal.rows() + blinkSignal.rows(), -1.0f );
+	std::vector<int> s,e;
+	for( unsigned c = 0; c < flashSignal.rows(); ++c )
 	{
-		inner = &blinkyStarts;
-		outer = &flashStarts;
+		if( flashSignal(c) > 0 )
+			s.push_back( c+blinkSignal.rows() );
+		else if( flashSignal(c) < 0 )
+			e.push_back( c+blinkSignal.rows() );
 	}
-	else
+	
+	for( unsigned c = blinkSignal.rows(); c < blinkSignal.rows()  + flashSignal.rows(); ++c )
 	{
-		inner = &flashStarts;
-		outer = &blinkyStarts;
-	}
-	
-	
-	float bestErr = 99999999.99f;
-	int bestInd = 0;
-	
-	
-	// put the shorter (inner) sequence at the start of the longer (outer) sequence, then at the 1st, position, then 2nd.. etc..
-	//
-	// Ah! would'st that 'twer so simple. What prey tell, oh Murray of coding days past, shall be done 't resolve that woderful
-	// scenario where both are equal, but we pick the wrong inner, and, oh dear! That inner needed to move _before_ the outer?
-	// What then, dear chappy dear lad, dear ancester of shared bones? 
-	//
-	// Seriously though... can there ever in practice be a situation where a shorter inner needs to move before the outer? Ach, 
-	// "maybe" is the best answer to that, so we need a fix that allows for that.
-	//
-	// Interesting, sometimes the mocap LED can produce multiple flashes for one flash which I think causes us to need to allow
-	// the inner to slide beyond the outer at the end as well as at the start.
-	std::vector<int> offsets;
-	int i = -2;
-	done = false;
-	while( !done )
-	{
-		//
-		// Get each flash-start of the inner sequence as a time from the "first" flash.
-		// Note that, to allow for the inner sequence to start _before_ the outer sequence
-		// we might that "first" flash to be several flashes inside the inner sequence.
-		//
-		std::vector<int> inner0( inner->size() );
-		for( unsigned c = 0; c < inner0.size(); ++c )
+		float d = bsp.cols();
+		for( unsigned sc = 0; sc < s.size(); ++sc )
 		{
-			inner0[c] = inner->at(c) - inner->at( std::abs( std::min(0, i)) );
+			d = std::min( d, std::abs( (float)c - s[sc] ) );
 		}
+		bsp(0,c) = d;
 		
-		//
-		// The duration of the inner sequence is now inner0.back() ( i.e. inner.back() - inner[ first ] )
-		// where first may be 0,1,2 depending on how much of the head we allow to crop off to allow inner 
-		// to start before outer.
-		//
-		std::vector<int> outer0;
-		int d = 0;
-		unsigned c = std::max(i,0);
-		while( d < inner0.back() + 10 && c < outer->size() )
+		d = bsp.cols();
+		for( unsigned ec = 0; ec < e.size(); ++ec )
 		{
-		
-			d = outer->at(c) - outer->at(std::max(i,0));
-			outer0.push_back( d );
-			++c;
+			d = std::min( d, std::abs( (float)c - e[ec] ) );
 		}
-		
-		cout << "---- " << i << " ---- " << endl;
-		
-		if( outer0.size() > 0 )
-		{
-			
-			cout << "inner0 (" << inner0.size() << "): ";
-			for( unsigned c = 0; c < inner0.size(); ++c )
-			{
-				cout << inner0[c] << " ";
-			}
-			cout << endl;
-			
-			cout << "outer0 (" << outer0.size() << "): ";
-			for( unsigned c = 0; c < outer0.size(); ++c )
-			{
-				cout << outer0[c] << " ";
-			}
-			cout << endl;
-			
-			cout << "inner0 per: ";
-			for( unsigned c = 0; c < inner0.size()-1; ++c )
-			{
-				cout << inner0[c+1] - inner0[c] << " ";
-			}
-			cout << endl;
-			
-			cout << "outer0 per: ";
-			for( int c = 0; c < (int)outer0.size()-1; ++c )
-			{
-				cout << outer0[c+1] - outer0[c] << " ";
-			}
-			cout << endl;
-			
-			// find the mutually best inner for each outer.
-			genMatrix E = genMatrix::Zero( inner0.size(), outer0.size() );
-			for( unsigned ic = 0; ic < inner0.size(); ++ic )
-			{
-				for( unsigned oc = 0; oc < outer0.size(); ++oc )
-				{
-					E( ic, oc ) = abs( inner0[ic] - outer0[oc] );
-				}
-			}
-			
-	// 		cout << E << endl;
-			std::vector< int > i2o( inner0.size(), -1 );
-			int ic, oc;
-			float x = E.minCoeff(&ic, &oc);
-			while( x < 90000 )
-			{
-				i2o[ic] = oc;
-				for( unsigned oc2 = 0; oc2 < E.cols(); ++oc2 )
-					E(ic, oc2) = 90000;
-				for( unsigned ic2 = 0; ic2 < E.rows(); ++ic2 )
-					E(ic2, oc) = 90000;
-				x = E.minCoeff(&ic, &oc);
-			}
-			
-			
-			
-			// find the offsets implied by this location.
-			std::vector<int> curOffsets;
-			for( unsigned ic = 0; ic < i2o.size(); ++ic )
-			{
-				if( i2o[ic] >= 0 )
-				{
-					int offset = outer->at( i2o[ic] + std::max(i,0) ) - inner->at(ic);
-					cout << i2o[ic] << " " << inner0[ic] << " " << outer0[ i2o[ic] ] << "  off: " << offset << endl;
-					curOffsets.push_back( offset );
-				}
-				else
-				{
-					cout << i2o[ic] << " " << inner0[ic] << " " << outer0[ i2o[ic] ] << "  N/A" << endl;
-				}
-			}
-			
-			// find the median offset.
-			std::vector<int> cof2 = curOffsets;
-			std::sort( cof2.begin(), cof2.end() );
-			int medianOffset = cof2[ cof2.size()/2 ];
-			
-			// compute the errors
-			std::vector<int> errs;
-			for( unsigned oc = 0; oc < curOffsets.size(); ++oc )
-			{
-				int e = abs( curOffsets[oc] - medianOffset );
-				cout << curOffsets[oc] << " -> " << e << endl;
-				errs.push_back(e);
-			}
-			
-			
-			if( errs.size() >= 2 )
-			{
-				// we want a somewhat robust error - is median enough?
-				std::sort( errs.begin(), errs.end() );
-				float safeMedianErr = errs[ 0.75 * errs.size() ]; 
-				
-				if( safeMedianErr <= bestErr+2 ) // <= because we're looking for the last best alignment (so accept a slightly worse error if needs be)
-				{
-					bestErr = safeMedianErr;
-					bestInd = i;
-					offsets = curOffsets;
-				}
-				cout << safeMedianErr << " (" << bestErr << ") " << endl << endl << endl;
-			}
-			
-			done = ( inner0.back() - outer0.back() ) > data.extraFrameOverlap;
-		}
-		else
-		{
-			cout << " -- not possible " << endl;
-			done = true; // ?
-		}
-		
-		++i;
-		
+		bsp(1,c) = d;
 	}
 	
 	
-	cout << bestInd << " " << bestErr << " " << outer->at( std::max(0,bestInd) ) << " " << inner->at( std::abs( std::min(0, bestInd) ) ) << endl;
+	int minOffset0 = 0;
+	float minOffsetErr = 999999999.99f;
+	for( unsigned offset0 = blinkSignal.rows() / 2; offset0 < blinkSignal.rows() + flashSignal.rows()/2; ++offset0 )
+	{
+		float d = 0.0f;
+		int cnt = 0;
+		for( unsigned c = 0; c < blinkSignal.rows(); ++c )
+		{
+			float s = bsp(0, c + offset0);
+			float e = bsp(1, c + offset0);
+			if( blinkSignal(c) > 0 && (s>=0 || e>=0) )
+			{
+				d += bsp(0, c + offset0);
+				++cnt;
+			}
+			else if( blinkSignal(c) < 0 && (s>=0 || e>=0))
+			{
+				d += bsp(1, c + offset0);
+				++cnt;
+			}
+		}
+		if( cnt > 2 )
+		{
+			d /= cnt;
+			
+			if( d < minOffsetErr )
+			{
+				minOffsetErr = d;
+				minOffset0   = offset0;
+			}
+			
+		}
+		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows() << " ) : "  << cnt <<  " : " << d << endl;
+	}
 	
-	//
-	// So, based on that, the final offset must be...
-	//
-	
-	std::vector< int > off2( offsets.begin() + offsets.size()/2, offsets.end() );
-	
-	// action tends to be latter half of data, so we'll always use the median of 
-	// the latter half of the data...
-	
-	std::sort( off2.begin(), off2.end() );
-	int finalOffset = off2[ off2.size()/2];
+	// which means that our best offset is at...
+	int finalOffset = -((int)minOffset0 - blinkSignal.rows());
 
-	// final offset should be mocframe = vidframe+offset
-	// currently it is outerFrame = innerFrame+offset
-	if( inner == &blinkyStarts )
-	{
-		finalOffset = -finalOffset;
-	}
 	cout << "final offset: " << finalOffset << endl;
 	
+	int numVidFrames = brightData.cols();
+	int numMocapFrames = data.tracks.begin()->second.cols();
+	cout << numVidFrames << " " << numMocapFrames << endl;
+	int baseOffset = numMocapFrames - numVidFrames;
 	
 	std::stringstream ss;
 	ss << data.dataRoot << data.testRoot << "/frameOffset";
