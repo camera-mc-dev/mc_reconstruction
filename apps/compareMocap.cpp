@@ -1,6 +1,8 @@
 #include "imgio/imagesource.h"
 #include "imgio/vidsrc.h"
 #include "imgio/loadsave.h"
+#include "imgio/vidWriter.h"
+
 #include "math/mathTypes.h"
 #include "math/intersections.h"
 #include "math/matrixGenerators.h"
@@ -9,6 +11,7 @@
 #include "renderer2/geomTools.h"
 #include "renderer2/sdfText.h"
 #include "renderer2/showImage.h"
+#include "renderer2/renWrapper.h"
 
 #include "misc/c3d.h"
 
@@ -73,7 +76,9 @@ struct SData
 	std::map< std::string, genMatrix > tracks;
 	
 	bool visualise;
-	
+	bool useHeadless;
+	std::string headlessRenderOutput;
+	bool outputToVideo;
 	
 	skeleton_t skelType;
 };
@@ -111,7 +116,8 @@ void GetSources( SData &data );
 
 class AlignRenderer : public Rendering::BasicRenderer
 {
-	friend class Rendering::RendererFactory;	
+	friend class Rendering::RendererFactory;
+	template<class T0, class T1 > friend class RenWrapper;
 	// The constructor should be private or protected so that we are forced 
 	// to use the factory...
 protected:
@@ -157,12 +163,6 @@ public:
 		return true;
 	}
 };
-
-
-
-
-
-
 
 
 
@@ -251,8 +251,9 @@ int main(int argc, char* argv[])
 	float ar = r/ (float) c;
 	
 	// create the renderer for display purposes.
-	cout << "creating window" << endl;
-	std::shared_ptr<AlignRenderer> ren;
+	cout << "creating renderer..." << endl;
+	std::shared_ptr<RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer> > renWrapper;
+	std::shared_ptr<VidWriter> vidWriter;
 	float winW = ccfg.maxSingleWindowWidth;
 	float winH = winW * ar;
 	if( winH > ccfg.maxSingleWindowHeight )
@@ -261,7 +262,26 @@ int main(int argc, char* argv[])
 		winW = winH / ar;
 	}
 	if( data.visualise )
-		Rendering::RendererFactory::Create( ren, winW, winH, "mocap vis");
+	{
+		renWrapper.reset( new RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer>( data.useHeadless, winW, winH, "compare mocap" ) );
+		
+		boost::filesystem::path p( data.headlessRenderOutput );
+		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+		{
+			// output is to a directory.
+			data.outputToVideo = false;
+		}
+		else if(p.extension() == ".mp4")
+		{
+			data.outputToVideo = true;
+			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
+			vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", tmp, 25, 18, "yuv422p" ) );
+		}
+		else
+		{
+			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+		}
+	}
 	
 	//
 	// Load the c3d track files.
@@ -306,36 +326,43 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	cout << data.offsetFile << endl;
-	std::ifstream infi( data.offsetFile );
-	std::string type;
-	infi >> type;
-	if( type.compare("offset:") == 0 )
+	if( data.offsetFile.compare("None") == 0 )
 	{
-		infi >> data.mocapOffset;
-		cout << type << " " << data.mocapOffset << endl;
+		data.mocapOffset = 0;
 	}
-	else if( type.compare("extraOffset:") == 0 )
+	else
 	{
-		int eo;
-		infi >> eo;
-// 		eo = -9; // fuck it...
-		data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
-		cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
-		
-		infi.close();
-		std::ofstream outfi(data.offsetFile);
-		
-		outfi << "offset: " << data.mocapOffset << endl;
-		outfi << "extraOffset: " << eo << endl;
-		outfi << endl;
-		outfi << "-------------" << endl;
-		outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
+		cout << data.offsetFile << endl;
+		std::ifstream infi( data.offsetFile );
+		std::string type;
+		infi >> type;
+		if( type.compare("offset:") == 0 )
+		{
+			infi >> data.mocapOffset;
+			cout << type << " " << data.mocapOffset << endl;
+		}
+		else if( type.compare("extraOffset:") == 0 )
+		{
+			int eo;
+			infi >> eo;
+// 			eo = -9; // fuck it...
+			data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
+			cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
+			
+			infi.close();
+			std::ofstream outfi(data.offsetFile);
+			
+			outfi << "offset: " << data.mocapOffset << endl;
+			outfi << "extraOffset: " << eo << endl;
+			outfi << endl;
+			outfi << "-------------" << endl;
+			outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
+		}
 	}
 	
 	
-	auto axesNode = Rendering::GenerateAxisNode3D( 500, "axesNode", ren );
-	ren->Get3dRoot()->AddChild(axesNode);
+	auto axesNode = Rendering::GenerateAxisNode3D( 500, "axesNode", renWrapper->GetActive() );
+	renWrapper->Get3dRoot()->AddChild(axesNode);
 	
 	cind = 0;
 	bool paused = false;
@@ -365,9 +392,9 @@ int main(int argc, char* argv[])
 		{
 			img = data.sources[ ind2id[cind] ]->GetCurrent().clone();
 			
-			ren->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
-			ren->Get3dCamera()->SetFromCalibration( calib, 500, 15000 );
-			ren->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+			renWrapper->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
+			renWrapper->Get3dCamera()->SetFromCalibration( calib, 500, 15000 );
+			renWrapper->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
 			
 			
 			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
@@ -452,13 +479,18 @@ int main(int argc, char* argv[])
 			}
 			
 			
-			ren->SetBGImage(img);
+			renWrapper->SetBGImage(img);
 			
 			frameAdvance = 0;
-			done = !ren->Step(camChange, paused, frameAdvance);
-			while( paused && frameAdvance == 0 )
+			if( data.useHeadless )
+				done = renWrapper->StepEventLoop();
+			else
 			{
-				done = !ren->Step(camChange, paused, frameAdvance);
+				done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
+				while( paused && frameAdvance == 0 )
+				{
+					done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
+				}
 			}
 			cout << "cc, fa: " << camChange << " " << frameAdvance << " " << cind << endl;
 			if( vfc >= 0 && (!paused || (paused && frameAdvance == 1 )) )
@@ -476,11 +508,23 @@ int main(int argc, char* argv[])
 				camChange = 0;
 			}
 			
-			cv::Mat cap = ren->Capture();
-			std::stringstream ss;
-			ss << "compVid/" << std::setw(6) << std::setfill('0') << data.sources.begin()->second->GetCurrentFrameID() << ".jpg";
-			cout << ss.str() << endl;
-			SaveImage( cap, ss.str() );
+			if( data.useHeadless )
+			{
+				cv::Mat cap = renWrapper->Capture();
+				
+				if( data.outputToVideo )
+				{
+					vidWriter->Write( cap );
+				}
+				else
+				{
+					std::stringstream ss;
+					ss << data.headlessRenderOutput << "/" << std::setw(6) << std::setfill('0') << data.sources.begin()->second->GetCurrentFrameID() << ".jpg";
+					cout << ss.str() << endl;
+					SaveImage( cap, ss.str() );
+				}
+				
+			}
 		}
 		
 		
@@ -552,9 +596,17 @@ void ParseConfig( std::string configFile, SData &data )
 		if( cfg.exists("visualise") )
 		{
 			data.visualise = cfg.lookup("visualise");
+			data.useHeadless = false;
+			if( cfg.exists("renderHeadless") )
+			{
+				data.useHeadless = cfg.lookup("renderHeadless");
+				data.headlessRenderOutput = data.dataRoot + data.testRoot + (const char*) cfg.lookup("renderTarget");
+			}
 		}
 		
-		data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
+		data.offsetFile = "None";
+		if( cfg.exists("offsetFile") )
+			data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
 		
 		data.skelType = OPOSE;
 		if( cfg.exists("skelType") )

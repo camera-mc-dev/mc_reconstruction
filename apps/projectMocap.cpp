@@ -1,6 +1,8 @@
 #include "imgio/imagesource.h"
 #include "imgio/vidsrc.h"
 #include "imgio/loadsave.h"
+#include "imgio/vidWriter.h"
+
 #include "math/mathTypes.h"
 #include "math/intersections.h"
 #include "math/matrixGenerators.h"
@@ -9,6 +11,7 @@
 #include "renderer2/geomTools.h"
 #include "renderer2/sdfText.h"
 #include "renderer2/showImage.h"
+#include "renderer2/renWrapper.h"
 
 #include "misc/c3d.h"
 #include "misc/tokeniser.h"
@@ -61,6 +64,10 @@ struct SData
 	Rendering::SDFText *textMaker;
 	
 	cv::Mat channelsHeatmap;
+	
+	
+	std::string renderTarget;
+	bool renderHeadless;
 	
 	bool visualise;
 	
@@ -119,7 +126,7 @@ public:
 void ParseConfig( std::string configFile, SData &data );
 void GetSources( SData &data );
 void ReadEvents( SData &data );
-void CreateNodes( std::shared_ptr< AlignRenderer> ren, SData &data, int winW, int winH, int timeLineWidth, int numVidFrames );
+void CreateNodes( std::shared_ptr< Rendering::AbstractRenderer > ren, SData &data, int winW, int winH, int timeLineWidth, int numVidFrames, std::shared_ptr<Rendering::SceneNode> bgRoot, std::shared_ptr<Rendering::SceneNode> fgRoot );
 
 int main(int argc, char* argv[])
 {
@@ -147,8 +154,8 @@ int main(int argc, char* argv[])
 	float ar = r/ (float) c;
 	
 	// create the renderer for display purposes.
-	cout << "creating window" << endl;
-	std::shared_ptr<AlignRenderer> ren;
+	cout << "creating renderer" << endl;
+	
 	float winW = ccfg.maxSingleWindowWidth;
 	float timeLineWidth = 100;
 	float winH = (winW - timeLineWidth) * ar;
@@ -217,8 +224,8 @@ int main(int argc, char* argv[])
 	}
 	cout << "min elements: " << minElements << endl;
 	
-	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << endl;
-	if( data.channels.rows() > 0 && data.channels.cols() < 0 )
+	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << " with max value: " << data.channels.maxCoeff() << endl;
+	if( data.channels.rows() > 0 && data.channels.cols() > 0 )
     {
 		// let's turn the channels data into a simple heatmap.
 		// I want there to be as many rows of this image as there are _video_ frames, except multiplied by
@@ -242,6 +249,7 @@ int main(int argc, char* argv[])
 			}
 		}
 		data.channelsHeatmap = hmch;
+		SaveImage( hmch, "channelsMap.jpg" );
 	}
 	else
 	{
@@ -249,11 +257,14 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	
+	std::shared_ptr< RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer> > renWrapper;
 	if( data.visualise )
 	{
-		Rendering::RendererFactory::Create( ren, winW, winH, "mocap vis");
-		CreateNodes( ren, data, winW, winH, timeLineWidth, data.sources.begin()->second->GetNumImages() );
+		renWrapper.reset( new RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer> (data.renderHeadless, winW, winH, "mocap vis" ));
+		CreateNodes( renWrapper->GetActive(), data, winW, winH, timeLineWidth, data.sources.begin()->second->GetNumImages(), renWrapper->Get2dBgRoot(), renWrapper->Get2dFgRoot() );
+		
+		renWrapper->Get2dBgCamera()->SetOrthoProjection(0, winW, 0, winH, -10, 10);
+		renWrapper->Get2dFgCamera()->SetOrthoProjection(0, winW, 0, winH, -10, 10);
 	}
 	
 	bool done = false;
@@ -296,6 +307,28 @@ int main(int argc, char* argv[])
 	}
 	
 	
+	// are we outputting to video or images?
+	std::shared_ptr<VidWriter> vidWriter;
+	bool outputToVideo = false;
+	if( data.renderHeadless )
+	{
+		boost::filesystem::path p( data.renderTarget );
+		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+		{
+			// output is to a directory.
+			outputToVideo = false;
+		}
+		else if(p.extension() == ".mp4")
+		{
+			outputToVideo = true;
+			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
+			vidWriter.reset( new VidWriter( data.renderTarget, "h264", tmp, 25, 18, "yuv422p" ) );
+		}
+		else
+		{
+			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+		}
+	}
 	
 	
 	std::stringstream oss;
@@ -401,10 +434,17 @@ int main(int argc, char* argv[])
 			
 			
 			frameAdvance = 0;
-			done = !ren->Step(camChange, paused, frameAdvance);
-			while( paused && frameAdvance == 0 )
+			if( data.renderHeadless )
 			{
-				done = !ren->Step(camChange, paused, frameAdvance);
+				done = renWrapper->StepEventLoop();
+			}
+			else
+			{
+				done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
+				while( paused && frameAdvance == 0 )
+				{
+					done = !renWrapper->ren->Step(camChange, paused, frameAdvance);
+				}
 			}
 			cout << "cc, fa: " << camChange << " " << frameAdvance << " " << cind << endl;
 			if( vfc >= 0 && (!paused || (paused && frameAdvance == 1 )) )
@@ -420,10 +460,21 @@ int main(int argc, char* argv[])
 				camChange = 0;
 			}
 			
-// 			std::stringstream gss;
-// 			gss << "projGrab/" << std::setw(6) << std::setfill('0') << vfc << ".jpg";
-// 			cv::Mat grab = ren->Capture();
-// 			SaveImage( grab, gss.str() );
+			// capture and save (if wanted)
+			if( data.renderHeadless )
+			{
+				cv::Mat grab = renWrapper->Capture();
+				if( outputToVideo )
+				{
+					vidWriter->Write( grab );
+				}
+				else
+				{
+					std::stringstream ss;
+					ss << data.renderTarget << "/" << std::setw(6) << std::setfill('0') << vfc << ".jpg";
+					SaveImage( grab, ss.str() );
+				}
+			}
 			
 		}
 		
@@ -541,6 +592,13 @@ void ParseConfig( std::string configFile, SData &data )
 		if( cfg.exists("visualise") )
 		{
 			data.visualise = cfg.lookup("visualise");
+			
+			data.renderHeadless = false;
+			if( cfg.exists("renderHeadless" ) )
+			{
+				data.renderHeadless = cfg.lookup("renderHeadless");
+				data.renderTarget   = data.dataRoot + data.testRoot + (const char*)cfg.lookup("renderTarget");
+			}
 		}
 		
 		data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
@@ -657,13 +715,11 @@ void ReadEvents( SData &data )
 	}
 }
 
-void CreateNodes( std::shared_ptr< AlignRenderer > ren, SData &data, int winW, int winH, int timeLineWidth, int numVidFrames )
+void CreateNodes( std::shared_ptr< Rendering::AbstractRenderer > ren, SData &data, int winW, int winH, int timeLineWidth, int numVidFrames, std::shared_ptr<Rendering::SceneNode> bgRoot, std::shared_ptr<Rendering::SceneNode> fgRoot )
 {
 	data.imgNode = Rendering::GenerateImageNode(0, 0, winW - timeLineWidth, winH, "imgNode", ren );
-	ren->Get2dBgRoot()->AddChild( data.imgNode );
+	bgRoot->AddChild( data.imgNode );
 	
-	ren->Get2dBgCamera()->SetOrthoProjection(0, winW, 0, winH, -10, 10);
-	ren->Get2dFgCamera()->SetOrthoProjection(0, winW, 0, winH, -10, 10);
 	
 	// timeline root is just an offset to the side of our window.
 	Rendering::NodeFactory::Create(data.tlRoot, "timelineRoot");
@@ -706,13 +762,13 @@ void CreateNodes( std::shared_ptr< AlignRenderer > ren, SData &data, int winW, i
 	
 	Eigen::Vector4f progCol; progCol << 0.4f, 0.8f, 0.8f, 0.6f;
 	data.momentNode->SetBaseColour(progCol);
-	ren->Get2dBgRoot()->AddChild( data.momentNode );
+	bgRoot->AddChild( data.momentNode );
 	
-	ren->Get2dFgRoot()->AddChild( data.tlRoot );
+	fgRoot->AddChild( data.tlRoot );
 	
 	// and a node for the event name
 	Rendering::NodeFactory::Create(data.txtRoot, "txtRoot");
-	ren->Get2dFgRoot()->AddChild( data.txtRoot );
+	fgRoot->AddChild( data.txtRoot );
 	
 	// and something to write with
 	CommonConfig ccfg;
@@ -722,7 +778,7 @@ void CreateNodes( std::shared_ptr< AlignRenderer > ren, SData &data, int winW, i
 	
 	// some way of showing the signals from the analog channels.
 	data.hmNode = Rendering::GenerateImageNode(winW-timeLineWidth, 0, timeLineWidth, winH, data.channelsHeatmap, "hmNode", ren );
-	ren->Get2dBgRoot()->AddChild( data.hmNode );
+	bgRoot->AddChild( data.hmNode );
 	
 // 	std::vector< std::shared_ptr< Rendering::MeshNode > > eventNodes;
 }
