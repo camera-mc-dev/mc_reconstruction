@@ -43,7 +43,7 @@ struct SData
 	// [cam][frame][person]
 	std::vector< std::map< int, std::vector<PersonPose> > > pcPoses;
 	
-	skeleton_t skelType;
+	poseSource_t poseDataType;
 	
 	int firstFrame;
 	
@@ -109,18 +109,14 @@ void ParseConfig( std::string cfgFile, SData &data )
 		}
 		
 		
-		std::string s = (const char*)cfg.lookup("skelType");
-		if( s.compare("open") == 0 || s.compare("openpose") == 0 )
+		std::string s = (const char*)cfg.lookup("poseDataType");
+		if( s.compare("jsonDir") == 0 )  // directory of JSON files
 		{
-			data.skelType = SKEL_OPOSE;
+			data.poseDataType = POSE_JSON_DIR;
 		}
-		if( s.compare("alpha") == 0 || s.compare("alphapose") == 0 )
+		if( s.compare("dlccsv") == 0 )
 		{
-			data.skelType = SKEL_APOSE;
-		}
-		if( s.compare("dlc") == 0 || s.compare("deeplabcut") == 0 )
-		{
-			data.skelType = SKEL_DLCUT;
+			data.poseDataType = POSE_DLC_CSV;
 		}
 		
 		
@@ -128,8 +124,8 @@ void ParseConfig( std::string cfgFile, SData &data )
 		data.occSettings.maxX = cfg.lookup("maxX");
 		data.occSettings.minY = cfg.lookup("minY");
 		data.occSettings.maxY = cfg.lookup("maxY");
-// 		data.occSettings.minZ = cfg.lookup("minZ");  // not using because always z-up
-// 		data.occSettings.maxZ = cfg.lookup("maxZ");
+		data.occSettings.minZ = cfg.lookup("minZ");
+		data.occSettings.maxZ = cfg.lookup("maxZ");
 		
 		data.occSettings.cellSize = cfg.lookup("cellSize");
 		
@@ -207,14 +203,13 @@ void LoadPoses( SData &data )
 	for( unsigned sc = 0; sc < data.poseSources.size(); ++sc )
 	{
 		// type of skeleton affects how we load data :(
-		switch( data.skelType )
+		switch( data.poseDataType )
 		{
-			case SKEL_OPOSE:
-			case SKEL_APOSE:
-				ReadPoseDirJSON( data.skelType, data.poseSources[sc], data.pcPoses[sc] );
+			case POSE_JSON_DIR:
+				ReadPoseDirJSON( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 			
-			case SKEL_DLCUT:
+			case POSE_DLC_CSV:
 				ReadDLC_CSV( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 		}

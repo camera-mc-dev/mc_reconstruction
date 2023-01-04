@@ -3,7 +3,7 @@
 
 void ReconstructPerson( 
                         PersonPose3D &person,
-                        skeleton_t skelType,
+                        Skeleton skeleton,
                         std::vector< Calibration > calibs,
                         float minConf,
                         leftRightDecision_t lrd,
@@ -11,7 +11,7 @@ void ReconstructPerson(
                         float distThreshRANSAC
                       )
 {
-	int numJoints = SkelNumJoints( skelType );
+	int numJoints = skeleton.GetNumKeypoints();
 	
 	std::vector<bool> doneJoint( numJoints, false );
 	for( unsigned jc = 0; jc < numJoints; ++jc )
@@ -23,10 +23,10 @@ void ReconstructPerson(
 		if( doneJoint[jc] )
 			continue;
 		
-		int pairedJoint = IsPair( jc, skelType );
+		int pairedJoint = skeleton.IsPair( jc );
 		if( pairedJoint >= 0 )
 		{
-			ReconstructJointPair( calibs, skelType, jc, pairedJoint, minConf, lrd, person );
+			ReconstructJointPair( calibs, skeleton, jc, pairedJoint, minConf, lrd, person );
 			doneJoint[jc] = true;
 			doneJoint[pairedJoint] = true;
 			

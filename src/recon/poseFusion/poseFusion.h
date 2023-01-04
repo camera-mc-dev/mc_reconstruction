@@ -70,7 +70,58 @@ struct PersonPose3D
 // to be on the left or right of the body, and if we expect it to be 
 // a pair of joints (e.g. wrists, elbows, knees, etc...).
 //
-enum skeleton_t {SKEL_OPOSE, SKEL_APOSE, SKEL_DLCUT};
+class Skeleton
+{
+public:
+	
+	// allow empty skeleton even though really it needs to be built
+	// from the config file - I'm just too lazy to deal with the hoops
+	// of not having this empty option.
+	Skeleton( );
+	
+	// construct skeleton from a config file.
+	Skeleton( std::string configFile );
+	
+	// how many "joints" / "keypoints" are in the skeleton?
+	unsigned GetNumKeypoints();
+	
+	// given a "joint" / "keypoint" with id kpc, is it part of a left/right pair?
+	// if it is, what is the other point in the pair?
+	int IsPair( unsigned kpc );
+	std::string IsPair( std::string name );
+	
+	// given a "joint" / "keypoint" with id kpc, is it the left point of the pair?
+	bool IsLeft( unsigned kpc );
+	bool IsLeft( std::string name );
+	
+	
+	std::string GetName( unsigned kpc );
+	unsigned    GetIdx( std::string name );
+	std::map< int, std::string > GetNames();
+	
+	std::string GetParent( std::string name );
+	unsigned    GetParent( unsigned kpc     );
+	
+protected:
+	
+	std::map< int, std::string > id2Name;
+	std::map< std::string, int > name2Id;
+	
+	std::map< std::string, std::string > parents;
+	
+	struct SkelPoint
+	{
+		std::string name;
+		unsigned     idx;
+		bool      isLeft;
+		int         pair;
+	};
+	std::map< unsigned, SkelPoint > data;
+	
+};
+
+
+enum poseSource_t {POSE_JSON_DIR, POSE_DLC_CSV};
 enum leftRightDecision_t
 {
 	// for the first two sets of options, we know the person is facing parallel
@@ -81,12 +132,6 @@ enum leftRightDecision_t
 	// figure out which point each ray is closest to and vote on left vs. right.
 	LRD_VOTE
 };
-
-int IsPair( int jc, skeleton_t skel );
-bool IsLeft( int jc, skeleton_t skel );
-
-int SkelNumJoints( skeleton_t skel );
-
 
 
 
@@ -100,9 +145,9 @@ int SkelNumJoints( skeleton_t skel );
 // is a single frame.
 bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses );
 
-// this one also handles OpenPose and AlphaPose but looks for all 
+// this one also handles OpenPose and AlphaPose but looks for all json file in a directory.
 //
-void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::vector< PersonPose > > &poses );
+void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > > &poses );
 
 // and this for DeelLabCut - it reads all the frames of a sequence.
 void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses );
@@ -121,7 +166,7 @@ cv::Rect RobustBBox(
 //
 void ReconstructPerson( 
                         PersonPose3D &person,
-                        skeleton_t skelType,
+                        Skeleton skeleton,
                         std::vector< Calibration > calibs,
                         float minConf,
                         leftRightDecision_t lrd,
@@ -144,7 +189,7 @@ void ReconstructPerson(
 hVec3D RANSACIntersectRays3D( std::vector< hVec3D > &starts, std::vector< hVec3D > &rays, std::vector<float> &confidences, std::vector<int> &resInliers, float thresh );
 
 void ReconstructSingleJoint( std::vector< Calibration > calibs, int jc0, float minConf, float distanceThresh, int minNumInliers, PersonPose3D &person );
-void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelType, int jc0, int jc1, float minConf, leftRightDecision_t lrd, PersonPose3D &person );
+void ReconstructJointPair( std::vector< Calibration > calibs, Skeleton skeleton, int jc0, int jc1, float minConf, leftRightDecision_t lrd, PersonPose3D &person );
 void ResolveLeftRight( 
                        leftRightDecision_t lrd, 
                        std::vector< hVec3D > &starts,
@@ -224,6 +269,7 @@ public:
 		if( debug )
 		{
 			cout << D << endl;
+// 			sleep(1);
 		}
 		
 		//
@@ -250,7 +296,8 @@ public:
 			{
 				// no, so we can just use this error.
 				pc2cam[pc].insert( cc );
-				e1 += confidences[rc] * D(pc,rc);
+				//e1 += confidences[rc] * D(pc,rc);
+				e1 += D(pc,rc);
 				
 				// make sure we can't use this ray again.
 				D(0,rc) = D(1,rc) = 100001;        

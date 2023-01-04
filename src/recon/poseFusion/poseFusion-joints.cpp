@@ -122,7 +122,7 @@ void ReconstructSingleJoint( std::vector< Calibration > calibs, int jc0, float m
 
 
 
-void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelType, int jc0, int jc1, float minConf, leftRightDecision_t lrd, PersonPose3D &person )
+void ReconstructJointPair( std::vector< Calibration > calibs, Skeleton skeleton, int jc0, int jc1, float minConf, leftRightDecision_t lrd, PersonPose3D &person )
 {
 	//
 	// The detectors have a really big problem with left and right.
@@ -138,14 +138,14 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 	int rc = 0;
 	while( rc < rays.size() )
 	{
-		isLeft.push_back( IsLeft( jc0, skelType ) );
+		isLeft.push_back( skeleton.IsLeft( jc0 ) );
 		++rc;
 	}
 	
 	GetRays( minConf, calibs, person, jc1, starts, rays, confidences, cams );
 	while( rc < rays.size() )
 	{
-		isLeft.push_back( IsLeft( jc1, skelType ) );
+		isLeft.push_back( skeleton.IsLeft( jc1 ) );
 		++rc;
 	}
 	
@@ -175,11 +175,11 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 	SDS::Optimiser sdsopt;
 	std::vector<double> initPos(6), initRanges(6);
 	initPos = { p(0), p(1), p(2), p(0), p(1), p(2) }; // initial solution is both joints on the mid-point.
-	initRanges = {50,50,50, 50,50,50};                // initial search range of 5 cm
+	initRanges = {15,15,15, 15,15,15};                // initial search range of 15 cm
 	
 	// make the agents.
 	std::vector< JointPairAgent* > jpagents;
-	jpagents.assign(50, NULL );
+	jpagents.assign( 75, NULL );
 	std::vector< SDS::Agent* > agents( jpagents.size() );
 	for( unsigned ac = 0; ac < agents.size(); ++ac )
 	{
@@ -199,10 +199,15 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 		hVec3D pa; pa << jpagents[bestAgent]->position[0], jpagents[bestAgent]->position[1], jpagents[bestAgent]->position[2], 1.0f;
 		hVec3D pb; pb << jpagents[bestAgent]->position[3], jpagents[bestAgent]->position[4], jpagents[bestAgent]->position[5], 1.0f;
 		
-// 		jpagents[bestAgent]->debug = true;
-// 		cout << ic++ << ":" << endl;
-// 		cout << jpagents[bestAgent]->EvaluatePosition() << endl;
-// 		jpagents[bestAgent]->debug = false;
+// 		if( jc0 == 2 || jc1 == 2 )
+// 		{
+// 			cout << "-----" << endl;
+// 			jpagents[bestAgent]->debug = true;
+// 			cout << ic++ << ":" << endl;
+// 			cout << jpagents[bestAgent]->EvaluatePosition() << endl;
+// 			cout << "-----" << endl;
+// 			jpagents[bestAgent]->debug = false;
+// 		}
 	}
 	while( !sdsopt.CheckTerm() );
 	
@@ -216,7 +221,7 @@ void ReconstructJointPair( std::vector< Calibration > calibs, skeleton_t skelTyp
 	hVec3D left, right;
 	ResolveLeftRight( lrd, starts, rays, confidences, isLeft, pa, pb, left, right );
 	
-	if( IsLeft( jc0, skelType) )
+	if( skeleton.IsLeft( jc0 ) )
 	{
 		person.joints[jc0] = left;
 		person.joints[jc1] = right;

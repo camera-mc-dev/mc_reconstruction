@@ -14,6 +14,8 @@
 #include "renderer2/renWrapper.h"
 
 #include "misc/c3d.h"
+#include "misc/trcLoader.h"
+#include "recon/poseFusion/poseFusion.h"
 
 #include <map>
 #include <iostream>
@@ -27,34 +29,7 @@ using std::endl;
 #include "commonConfig/commonConfig.h"
 
 
-//
-//      SKELETON (Openpose):              ||        SKELETON (Alphapose):       ||        SKELETON (DeepLabCut):
-//      right  left                       ||        right  left                 ||        right   left
-//                                        ||                                    ||    
-//      Head:                             ||        Head:                       ||        Head:
-//       17      18     Ears              ||         16      17     Ears        ||             13         "forehead"
-//        15    16      Eyes              ||          14    15      Eyes        ||                         
-//           00         Nose              ||             00         Nose        ||             12         "chin"
-//                                        ||                                    ||    
-//      Body:                             ||        Body:                       ||        Body:
-//           01         Neck              ||             01         Neck        ||                        Neck
-//        02    05      Shoulders         ||          02    05      Shoulders   ||          08    09      Shoulders
-//        03    06      Elbows            ||          03    06      Elbows      ||          07    10      Elbows
-//        04    07      Wrists            ||          04    07      Wrists      ||          06    11      Wrists
-//                                        ||                                    ||    
-//      Legs:                             ||        Legs:                       ||        Legs:
-//        09 08 12      Hips              ||          08    11      Hips        ||          02    03      Hips
-//        10    13      Knees             ||          09    12      Knees       ||          01    04      Knees
-//        11    14      Ankles            ||          10    13      Ankles      ||          00    05      Ankles
-//                                        ||                                    ||    
-//      Feet:                             ||                                    ||    
-//        24    21      Heels             ||                                    ||    
-//         22  19       Big toes          ||                                    ||    
-//       23      20     Little toes       ||                                    ||    
-                                                                              
 
-
-enum skeleton_t {OPOSE, APOSE, DLCUT, SKNONE};
 
 struct SData
 {
@@ -75,12 +50,16 @@ struct SData
 	std::vector<unsigned> trackStartFrames;
 	std::map< std::string, genMatrix > tracks;
 	
+	// these must be in same order as trackFiles
+	std::vector< std::string > skeletonFiles; 
+	std::vector< poseSource_t > poseDataTypes;
+	std::vector< Skeleton > skeletons;
+	
 	bool visualise;
 	bool useHeadless;
 	std::string headlessRenderOutput;
 	bool outputToVideo;
 	
-	skeleton_t skelType;
 };
 
 bool GetLine( SData &data, int tfc, int mfc, std::string n0, std::string n1, cv::Point &p0, cv::Point &p1)
@@ -167,63 +146,6 @@ public:
 
 
 
-bool IsLeft( int jc, skeleton_t skel )
-{
-	if( skel == OPOSE )
-	{
-		switch(jc)
-		{
-			case 18:
-			case 16:
-			case 5:
-			case 6:
-			case 7:
-			case 12:
-			case 13:
-			case 14:
-			case 21:
-			case 19:
-			case 20:
-				return true;
-				break;
-		}
-		return false;
-	}
-	else if( skel == APOSE )
-	{
-		switch(jc)
-		{
-			case 17:
-			case 15:
-			case 5:
-			case 6:
-			case 7:
-			case 11:
-			case 12:
-			case 13:
-				return true;
-				break;
-		}
-		return false;
-	}
-	else if( skel == DLCUT )
-	{
-		switch(jc)
-		{
-			case 3:
-			case 4:
-			case 5:
-			case 9:
-			case 10:
-			case 11:
-				return true;
-				break;
-		}
-		return false;
-	}
-	return false;
-}
-
 
 
 int main(int argc, char* argv[])
@@ -291,7 +213,16 @@ int main(int argc, char* argv[])
 	{
 		cout << "loading: " << data.trackFiles[tfc] << endl;
 		std::map< std::string, genMatrix > newTracks;
-		LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
+		if( data.trackFiles[tfc].find(".c3d") != std::string::npos )
+		{
+			cout << "loading (c3d): " << data.trackFiles[tfc] << endl;
+			LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
+		}
+		else if( data.trackFiles[tfc].find(".trc") > 0 != std::string::npos )
+		{
+			cout << "loading (trc): " << data.trackFiles[tfc] << endl;
+			LoadTRCFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
+		}
 		cout << "\tnew tracks: " << newTracks.size() << endl;
 		cout << "\tstart Frame: " << data.trackStartFrames[tfc] << endl;
 		for( auto ti = newTracks.begin(); ti != newTracks.end(); ++ti )
@@ -437,44 +368,20 @@ int main(int argc, char* argv[])
 				std::stringstream ss;
 				
 				cv::Point a, b;
-				
-				if( GetLine( data, tfc, mfc, "RIGHT_SHOULDER", "RIGHT_ELBOW", a, b) )
+				auto pnames = data.skeletons[tfc].GetNames();
+				for( auto i = pnames.begin(); i != pnames.end(); ++i )
 				{
-					cv::line( img, a, b, colour, 2 );
+					std::string parent = data.skeletons[tfc].GetParent( i->second );
+					
+					if( GetLine( data, tfc, mfc, i->second, parent, a, b) )
+					{
+						if( data.skeletons[tfc].IsLeft( i->second ) || data.skeletons[tfc].IsLeft( parent ) )
+							cv::line( img, a, b, colour, 2 );
+						else
+							cv::line( img, a, b, colour/2, 2 );
+					}
+					
 				}
-				if( GetLine( data, tfc, mfc, "RIGHT_ELBOW", "RIGHT_WRIST", a, b) )
-				{
-					cv::line( img, a, b, colour, 2 );
-				}
-				if( GetLine( data, tfc, mfc, "LEFT_SHOULDER", "LEFT_ELBOW", a, b) )
-				{
-					cv::line( img, a, b, colour/2, 2 );
-				}
-				if( GetLine( data, tfc, mfc, "LEFT_ELBOW", "LEFT_WRIST", a, b) )
-				{
-					cv::line( img, a, b, colour/2, 2 );
-				}
-				
-				if( GetLine( data, tfc, mfc, "RIGHT_HIP", "RIGHT_KNEE", a, b) )
-				{
-					cv::line( img, a, b, colour, 2 );
-				}
-				if( GetLine( data, tfc, mfc, "RIGHT_KNEE", "RIGHT_ANKLE", a, b) )
-				{
-					cv::line( img, a, b, colour, 2 );
-				}
-				if( GetLine( data, tfc, mfc, "LEFT_HIP", "LEFT_KNEE", a, b) )
-				{
-					cv::line( img, a, b, colour/2, 2 );
-				}
-				if( GetLine( data, tfc, mfc, "LEFT_KNEE", "LEFT_ANKLE", a, b) )
-				{
-					cv::line( img, a, b, colour/2, 2 );
-				}
-				
-				
-				
-				
 				
 			}
 			
@@ -608,27 +515,19 @@ void ParseConfig( std::string configFile, SData &data )
 		if( cfg.exists("offsetFile") )
 			data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
 		
-		data.skelType = OPOSE;
-		if( cfg.exists("skelType") )
+		
+		libconfig::Setting &skfs = cfg.lookup("skeletonFiles");
+		assert( skfs.getLength() == data.trackFiles.size() );
+		for( unsigned c = 0; c < skfs.getLength(); ++c )
 		{
-			std::string s = (const char*)cfg.lookup("skelType");
-			if( s.compare("open") == 0 || s.compare("openpose") == 0 )
-			{
-				data.skelType = OPOSE;
-			}
-			if( s.compare("alpha") == 0 || s.compare("alphapose") == 0 )
-			{
-				data.skelType = APOSE;
-			}
-			if( s.compare("dlc") == 0 || s.compare("deeplabcut") == 0 )
-			{
-				data.skelType = DLCUT;
-			}
-			if( s.compare("dlc") == 0 || s.compare("deeplabcut") == 0 )
-			{
-				data.skelType = SKNONE;
-			}
+			std::string s = (const char*) skfs[c];
+			std::stringstream ss;
+			ss << data.dataRoot << data.testRoot << s;
+			data.skeletonFiles.push_back( ss.str() );
+			data.skeletons.push_back( Skeleton( s ) );
 		}
+		
+		
 		
 	}
 	catch( libconfig::SettingException &e)
