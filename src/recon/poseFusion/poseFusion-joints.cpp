@@ -179,7 +179,7 @@ void ReconstructJointPair( std::vector< Calibration > calibs, Skeleton skeleton,
 	
 	// make the agents.
 	std::vector< JointPairAgent* > jpagents;
-	jpagents.assign( 75, NULL );
+	jpagents.assign( 25, NULL );
 	std::vector< SDS::Agent* > agents( jpagents.size() );
 	for( unsigned ac = 0; ac < agents.size(); ++ac )
 	{
