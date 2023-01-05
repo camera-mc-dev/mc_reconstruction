@@ -16,6 +16,9 @@ specification of the hierarchy of those keypoints.
 # Points should come either as single elements, or as left/right pairs,
 # If points are supplied as left/right pairs then the fusion algorithm
 # will have extra information for resolving possible left/right swaps
+# When supplied as left/right pair, the _right_ point should come first,
+# as per this example. The tool _does not infer right/left_ from the 
+# names, only from the order of the pair.
 #
 # Each point should have a name, and the 0-indexed id from the detector.
 # This example matches the OpenPose Body-25
