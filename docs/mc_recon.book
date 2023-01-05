@@ -33,10 +33,11 @@ bk.MakeChapter( 3, "Occupancy Tracker", ["chapters/occTracker.md"])
 bk.MakeChapter( 4, "Sparse Pose Tracker", ["chapters/poseTracker.md"])
 bk.MakeChapter( 5, "Sparse Pose Fusion", ["chapters/poseFusion.md"])
 bk.MakeChapter( 6, "Sparse Pose Config", ["chapters/poseConfig.md"])
-bk.MakeChapter( 6, "Skeleton Config", ["chapters/skelConfig.md"])
-bk.MakeChapter( 7, "General Pose Tracker", ["chapters/genPoseTracker.md"])
-bk.MakeChapter( 8, "General Pose Tracker", ["chapters/genPoseConfig.md"])
-#bk.MakeChapter( 5, "Voxel Hull", ["chapters/volume.md"])
+bk.MakeChapter( 7, "Skeleton Config", ["chapters/skelConfig.md"])
+bk.MakeChapter( 8, "Sparse Pose Rendering", ["chapters/sparsePoseRendering.md"])
+bk.MakeChapter( 9, "General Pose Tracker", ["chapters/genPoseTracker.md"])
+bk.MakeChapter(10, "General Pose Tracker", ["chapters/genPoseConfig.md"])
+#bk.MakeChapter(11, "Voxel Hull", ["chapters/volume.md"])
 
 
 

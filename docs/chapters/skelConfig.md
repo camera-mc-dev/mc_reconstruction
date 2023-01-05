@@ -41,6 +41,8 @@ points = (
 # Using the keypoint name, indicate the _parent_ of the joint. If it 
 # has no parent, then it should have _itself_ as its parent.
 #
+# This hierarchy is currently used only for rendering purposes.
+#
 hierarchy = (
               ( "RIGHT_EAR",     "RIGHT_EYE"), ( "LEFT_EAR",     "LEFT_EYE"),
               ( "RIGHT_EYE",          "NOSE"), ( "LEFT_EYE",         "NOSE"),
