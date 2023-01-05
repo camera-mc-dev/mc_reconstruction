@@ -9,11 +9,11 @@
 
 int main( int argc, char *argv[] )
 {
-	if( argc != 4 && argc != 5)
+	if( argc != 5 && argc != 6)
 	{
 		cout << "Tool to render sparse pose detections" << endl;
 		cout << "Usage: " << endl;
-		cout << argv[0] << "<image source> <pose type> <pose source> | <render target>" << endl << endl;
+		cout << argv[0] << "<image source> <skel file> <pose type> <pose source> | <render target>" << endl << endl;
 		cout << "<render target> is either a directory name or .mp4 video filename, " << endl;
 		cout << "and iff it is specified, rendering will be headless                " << endl << endl;
 		exit(0);
@@ -21,9 +21,9 @@ int main( int argc, char *argv[] )
 	
 	bool headless = false;
 	std::string renderTarget;
-	if( argc == 5 )
+	if( argc == 6 )
 	{
-		renderTarget = argv[4];
+		renderTarget = argv[5];
 		headless = true;
 	}
 	
@@ -36,34 +36,40 @@ int main( int argc, char *argv[] )
 	//
 	// what type of pose data is it?
 	//
-	std::string pstr( argv[2] );
-	skeleton_t skelType;
-	if( pstr.compare("open") == 0 || pstr.compare("openpose") == 0 )
+	std::string pstr( argv[3] );
+	poseSource_t poseDataType;
+	if( pstr.compare("jsonDir") == 0 )  // directory of JSON files
 	{
-		skelType = SKEL_OPOSE;
+		poseDataType = POSE_JSON_DIR;
 	}
-	if( pstr.compare("alpha") == 0 || pstr.compare("alphapose") == 0 )
+	else if( pstr.compare("dlccsv") == 0 )
 	{
-		skelType = SKEL_APOSE;
+		poseDataType = POSE_DLC_CSV;
 	}
-	if( pstr.compare("dlc") == 0 || pstr.compare("deeplabcut") == 0 )
+	else
 	{
-		skelType = SKEL_DLCUT;
+		cout << "can only load pose data from jsonDir or dlccsv" << endl;
+		cout << "got: " << pstr << endl;
+		exit(0);
 	}
+	
+	//
+	// Load the skeleton file
+	//
+	Skeleton skel( argv[2] );
 	
 	//
 	// Load the pose data
 	//
 	std::map< int, std::vector<PersonPose> > poseData;
-	switch( skelType )
+	switch( poseDataType )
 	{
-		case SKEL_OPOSE:
-		case SKEL_APOSE:
-			ReadPoseDirJSON( skelType, argv[3], poseData );
+		case POSE_JSON_DIR:
+			ReadPoseDirJSON( argv[4], poseData );
 			break;
 		
-		case SKEL_DLCUT:
-			ReadDLC_CSV( pstr, poseData );
+		case POSE_DLC_CSV:
+			ReadDLC_CSV(  argv[4], poseData );
 			break;
 	}
 	
@@ -95,53 +101,28 @@ int main( int argc, char *argv[] )
 	
 	// we want to draw lines between some subsets of the keypoints
 	std::vector< std::pair<int,int> > leftLines, rightLines, midLines;
-	switch( skelType )
+	auto pnames = skel.GetNames();
+	for( auto i = pnames.begin(); i != pnames.end(); ++i )
 	{
-		case SKEL_OPOSE:
-			rightLines.push_back( std::pair<int,int>(1,2) );
-			rightLines.push_back( std::pair<int,int>(2,3) );
-			rightLines.push_back( std::pair<int,int>(3,4) );
-			
-			rightLines.push_back( std::pair<int,int>(8,9)  );
-			rightLines.push_back( std::pair<int,int>(9,10) );
-			rightLines.push_back( std::pair<int,int>(10,11));
-			
-			midLines.push_back( std::pair<int,int>(1,8)  );
-			
-			leftLines.push_back( std::pair<int,int>(1,5) );
-			leftLines.push_back( std::pair<int,int>(5,6) );
-			leftLines.push_back( std::pair<int,int>(6,7) );
-			
-			leftLines.push_back( std::pair<int,int>(8,12) );
-			leftLines.push_back( std::pair<int,int>(12,13));
-			leftLines.push_back( std::pair<int,int>(13,14));
-			
-			break;
-		case SKEL_APOSE:
-			rightLines.push_back( std::pair<int,int>(1,2) );
-			rightLines.push_back( std::pair<int,int>(2,3) );
-			rightLines.push_back( std::pair<int,int>(3,4) );
-			
-			rightLines.push_back( std::pair<int,int>(1,8) );
-			rightLines.push_back( std::pair<int,int>(8,9) );
-			rightLines.push_back( std::pair<int,int>(9,10));
-			
-			
-			
-			leftLines.push_back( std::pair<int,int>(1,5) );
-			leftLines.push_back( std::pair<int,int>(5,6) );
-			leftLines.push_back( std::pair<int,int>(6,7) );
-			
-			leftLines.push_back( std::pair<int,int>(1, 11));
-			leftLines.push_back( std::pair<int,int>(11,12));
-			leftLines.push_back( std::pair<int,int>(12,13));
-			
-			break;
+		std::string parent = skel.GetParent( i->second );
 		
-		case SKEL_DLCUT:
-			// Not bothering.
-			break;
+		int i0 = skel.GetIdx( i->second );
+		int i1 = skel.GetIdx( parent );
+		
+		if( skel.IsLeft(i0) && skel.IsPair(i0) >= 0 )
+		{
+			leftLines.push_back( std::pair<int,int>(i0,i1) );
+		}
+		else if( !skel.IsLeft(i0) && skel.IsPair(i0) >= 0 )
+		{
+			rightLines.push_back( std::pair<int,int>(i0,i1) );
+		}
+		else
+		{
+			midLines.push_back( std::pair<int,int>(i0,i1) );
+		}
 	}
+	
 	
 	
 	//
@@ -202,8 +183,8 @@ int main( int argc, char *argv[] )
 				hVec2D p0 = person.joints[ midLines[mlc].first  ];
 				hVec2D p1 = person.joints[ midLines[mlc].second ];
 				
-				float c0 = person.confidences[leftLines[mlc].first];
-				float c1 = person.confidences[leftLines[mlc].second];
+				float c0 = person.confidences[midLines[mlc].first];
+				float c1 = person.confidences[midLines[mlc].second];
 				
 				if( c0 > 0.3 && c1 > 0.3 )
 					cv::line( img, cv::Point(p0(0), p0(1)), cv::Point(p1(0),p1(1)), midColour, 2 );
@@ -213,8 +194,8 @@ int main( int argc, char *argv[] )
 				hVec2D p0 = person.joints[ rightLines[rlc].first  ];
 				hVec2D p1 = person.joints[ rightLines[rlc].second ];
 				
-				float c0 = person.confidences[leftLines[rlc].first];
-				float c1 = person.confidences[leftLines[rlc].second];
+				float c0 = person.confidences[rightLines[rlc].first];
+				float c1 = person.confidences[rightLines[rlc].second];
 				
 				if( c0 > 0.3 && c1 > 0.3 )
 					cv::line( img, cv::Point(p0(0), p0(1)), cv::Point(p1(0),p1(1)), rightColour, 2 );

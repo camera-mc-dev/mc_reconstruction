@@ -144,9 +144,15 @@ void ParseConfig( std::string cfgFile, SData &data )
 		{
 			data.poseDataType = POSE_JSON_DIR;
 		}
-		if( s.compare("dlccsv") == 0 )
+		else if( s.compare("dlccsv") == 0 )
 		{
 			data.poseDataType = POSE_DLC_CSV;
+		}
+		else
+		{
+			cout << "can only load pose data from jsonDir or dlccsv" << endl;
+			cout << "got: " << s << endl;
+			exit(0);
 		}
 		
 		s = (const char*)cfg.lookup("skeletonFile");
@@ -560,8 +566,14 @@ int main( int argc, char* argv[] )
 					cv::circle( img, cv::Point( p(0), p(1) ), 4, cv::Scalar( b,g,r ), 2 );
 					
 					// wont hurt to draw a line from obs to recon
-					hVec2D p2 = pers2d.joints[jc];
-					cv::line( img, cv::Point( p(0), p(1) ), cv::Point( p2(0), p2(1) ), cv::Scalar( b/2, g/2, r/2 ), 2 );
+					// NOTE: seems to be possible to have a view with no observations? Yes, of course it is.
+					if( pers2d.joints.size() == pers3d.joints.size() )
+					{
+						hVec2D p2 = pers2d.joints[jc];
+						if( (p2(0) > 0 || p2(1) > 0) && p2(2) > data.minConf ) // don't draw line to bad obs.
+							cv::line( img, cv::Point( p(0), p(1) ), cv::Point( p2(0), p2(1) ), cv::Scalar( b/2, g/2, r/2 ), 2 );
+					}
+					
 				}
 				
 				ren->SetBGImage(img);

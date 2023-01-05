@@ -112,7 +112,7 @@ void ReconstructSingleJoint( std::vector< Calibration > calibs, int jc0, float m
 	{
 		std::vector< int > inliers;
 		person.joints[jc0] = RANSACIntersectRays3D( starts, rays, confidences, inliers, distanceThresh );
-		if( inliers.size() < minNumInliers )
+		if( inliers.size() <= minNumInliers )
 		{
 			person.joints[jc0] << 0,0,0,-1;
 		}
