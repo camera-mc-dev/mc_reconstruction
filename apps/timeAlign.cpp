@@ -149,19 +149,48 @@ void PeakDetect( genMatrix inData, genMatrix &out )
 	cout << "inData m, mn, M: " << inData.minCoeff() << " " << inData.mean() << " " << inData.maxCoeff() << endl;
 	for( unsigned rc = 0; rc < inData.rows(); ++rc )
 	{
-		for( unsigned cc = 20; cc < inData.cols() - 20; ++cc )
+		int peakStart = -1;
+		for( unsigned cc = 0; cc < inData.cols(); ++cc )
 		{
-			Eigen::VectorXf w = inData.block(rc,cc-10, 1, 20).transpose();
 			if(
 			    inData(rc,cc) > thr            && 
-			    inData(rc,cc) > inData(rc,cc-1) &&
-			    inData(rc,cc) > inData(rc,cc+1) 
+			    inData(rc,cc) > inData(rc,cc-3) &&
+			    inData(rc,cc) > inData(rc,cc+3) 
 			  )
 			{
 				out(rc,cc) = 1.0f;
+				if( peakStart < 0 )
+					peakStart = cc;
+			}
+			else
+			{
+				int peakEnd = cc;
+				if( peakEnd - peakStart > 1 )
+				{
+					float peakLoc = 0.0f;
+					float wsum    = 0.0f;
+					for( unsigned cc2 = peakStart; cc2 < peakEnd; ++cc2 )
+					{
+						peakLoc += inData(rc,cc) * cc2;
+						wsum    += inData(rc,cc);
+					}
+					
+					peakLoc /= wsum;
+					peakLoc = round(peakLoc);
+					
+					
+					for( unsigned cc = peakStart; cc < peakEnd; ++cc )
+					{
+						if(cc != peakLoc)
+							out(cc) = 0;
+					}
+				}
+				peakStart = -1;
 			}
 		}
 	}
+	
+	
 }
 
 
@@ -984,8 +1013,17 @@ int main(int argc, char* argv[])
 	}
 	
 	
-	int minOffset0 = 0;
-	float minOffsetErr = 999999999.99f;
+	//
+	// The last problem that we have is if we were stupid enough to have some kind
+	// of repeating pattern to the flash, making it non-unique across the sequence.
+	// Which we were for BioCV.
+	//
+	// In that case there could be multiple best fits. In which case, we want the 
+	// last one... which means a nice simple loop to find the overall minimum error 
+	// is not enough - we have to allow for multiple solutions.
+	//
+	
+	std::vector<float> offErrs;
 	for( unsigned offset0 = blinkSignal.rows() / 2; offset0 < blinkSignal.rows() + flashSignal.rows()/2; ++offset0 )
 	{
 		float d = 0.0f;
@@ -1008,19 +1046,64 @@ int main(int argc, char* argv[])
 		if( cnt > 2 )
 		{
 			d /= cnt;
-			
-			if( d < minOffsetErr )
-			{
-				minOffsetErr = d;
-				minOffset0   = offset0;
-			}
-			
+			offErrs.push_back(d);
 		}
-		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows() << " ) : "  << cnt <<  " : " << d << endl;
+		else
+		{
+			offErrs.push_back(9999);
+		}
+		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows() << " ) : "  << cnt <<  " : " << d << " " << offErrs.back() << endl;
 	}
 	
+	std::vector<float> offErrsCopy = offErrs;
+	std::sort( offErrsCopy.begin(), offErrsCopy.end() );
+	float medErr = offErrsCopy[ offErrsCopy.size() * 0.25 ];
+	float thrErr = (medErr + offErrsCopy[0]) / 2.0f;
+	int minOffset0;
+	{
+		std::vector<int> offMins;
+		int s, m, e;
+		s = e = m = -1;
+		float minErr = 9999.99f;
+		for( unsigned ec = 0; ec < offErrs.size(); ++ec )
+		{
+			if( offErrs[ec] < thrErr )
+			{
+				s = ec;
+				if( s < 0 )
+					minErr = offErrs[ec];
+				else
+				{
+					if( offErrs[ec] < minErr )
+					{
+						minErr = offErrs[ec];
+						m = ec;
+					}
+				}
+			}
+			else if( s >= 0 )
+			{
+				offMins.push_back( m );
+				s = -1;
+				m = -1;
+				minErr = 9999.99f;
+			}
+			
+			cout << ec << " : " << medErr << " ? " << offErrs[ec] << " : " << (offErrs[ec] < medErr) << " <> " << m << endl;
+		}
+		
+		cout << "got " << offMins.size() << " possible offsets: " << endl;
+		for( unsigned oc = 0; oc < offMins.size(); ++oc )
+		{
+			cout << offMins[oc] + blinkSignal.rows() / 2 << " : " << offErrs[ offMins[oc] ] << endl;
+		}
+		cout << "taking the last one in case of repeating flash pattern." << endl;
+		minOffset0 = offMins.back() + blinkSignal.rows() / 2;
+	}
+	
+	
 	// which means that our best offset is at...
-	int finalOffset = -((int)minOffset0 - blinkSignal.rows());
+	int finalOffset = -(minOffset0 - blinkSignal.rows());
 
 	cout << "final offset: " << finalOffset << endl;
 	
