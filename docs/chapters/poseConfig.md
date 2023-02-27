@@ -1,4 +1,4 @@
-## Configuration file for poseTracker and poseFusion
+## Configuration file for trackSparsePoses and fuseSparsePoses
 
 You can use the same configuration file for both `trackSparsePoses` and `fuseSparsePoses`, as many of the configuration parameters are shared between the two.
 
@@ -10,12 +10,49 @@ You can use the same configuration file for both `trackSparsePoses` and `fuseSpa
 dataRoot = "/path/to/datasets/"
 testRoot = "path/to/trial/"
 
+
 #
-# Then provide information about the image sources,
-# the calibration, and the pose sources.
-# Note that the image sources are only used when 
-# visualisation is enabled.
+# pose data can come in using a couple of different formats.
 #
+# 1) jsonDir
+#    Mostly we expect a directory of .json files per camera view,
+#    where the filename specifies the frame number, and the .json
+#    files are formatted as per OpenPose.
+# 
+# 2) dlccsv
+#    We also have the option to read pose from csv files as output by
+#    the original DeepLabCut
+#
+# 
+poseDataType = "jsonDir"
+
+
+#
+# Various pose detectors will output in OpenPose format, and the number of 
+# joints/keypoints output by those detectors can vary widely.
+# As such, we require that you specify a "skeleton" configuration file
+# to detail which keypoints to use, what names to give the result, and 
+# what the hierarchy of those keypoints/joints is.
+#
+skeletonFile = "../open.skel.cfg"
+
+
+
+#
+# Specify the raw pose detection sources themselves
+#
+poseSources = (
+                 "openpose_output_00/",
+                 "openpose_output_02/",
+                 "openpose_output_04/"
+              );
+
+
+#
+# Then provide information about the image sources and calibration.
+# Note that the image sources are only used when visualisation is enabled,
+# and are optional, but the calibration sources are obligatory
+# 
 imgSources = (
                "00.mp4",
                "02.mp4",
@@ -23,18 +60,14 @@ imgSources = (
              );
 
 calibFiles = (
-            "../calib_00/00.mp4.calib",
-            "../calib_00/02.mp4.calib",
-            "../calib_00/04.mp4.calib"
-          );
+               "../calib_00/00.mp4.calib",
+               "../calib_00/02.mp4.calib",
+               "../calib_00/04.mp4.calib"
+             );
 
 
 
-poseSources = (
-                 "openpose_output_00/",
-                 "openpose_output_02/",
-                 "openpose_output_04/"
-              );
+
               
 #
 # This file is the _output_ of trackSparsePoses
@@ -48,19 +81,9 @@ assocFile = "op.trk";
 
 
 
-# ----------------------
-# Specify which sparse-pose detection algorithm was used.
-# Currently support:
-# "open"  : 24 part OpenPose
-# "alpha" : 18 part AlphaPose 
-# "dlc"   :14 part deep lab cut (old original deep lab cut)
-# ----------------------
-skelType = "open";
-
-
 
 # ----------------------
-# Occupancy Map - best to assume you have to use z-up.
+# Occupancy Map - best to assume you have to use z-up, but it should work with y-up or x-up if you are so inclined
 # Refer to occupancy map documentation if none of this makes sense
 # ----------------------
 
@@ -83,9 +106,12 @@ detectionThreshold = 0.8;
 
 # ----------------------
 # Occupancy Tracking
+# Refer to occupancy tracking documentation for details
 # ----------------------
 distanceThreshold = 200.0
 numNearPeaks      = 50;
+
+
 
 
 # ----------------------
@@ -93,7 +119,8 @@ numNearPeaks      = 50;
 # ----------------------
 
 # We aim to save the fused pose into a .c3d file, so best to leave this 
-# always here as "true"
+# always here as "true" - but there's also a plain text output that we don't 
+# really use anymore.
 saveC3D = true;
 
 # We might want to align the .c3d file with some other mocap .c3d file.
@@ -104,7 +131,7 @@ C3DOffsetFile = "frameOffset";
 # This is the directory where we will write our output files.
 # We will have one .c3d file for every person tracked and specified 
 # in the assocFile
-reconDir = "op-fused-new";
+reconDir = "op-fused";
 
 # How should we resolve the left-right labelling of the fused keypoints?
 # "votes"      : Use the voting approach

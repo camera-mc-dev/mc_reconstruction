@@ -3,31 +3,29 @@
 
 #include "misc/tokeniser.h"
 
-int FNoFromJSONFilename( skeleton_t skelType, boost::filesystem::path pth )
+int FNoFromJSONFilename( boost::filesystem::path pth )
 {
 	int num = -1;
 	std::string fn = pth.filename().string();
 	
-	if( skelType == SKEL_OPOSE || skelType == SKEL_APOSE )
+	// we normally have a filename something like xx_<number>_keypoints.json
+	// so let us try...
+	int b = fn.rfind("_keypoints");
+	if( b != std::string::npos )
 	{
-		// we normally have a filename something like xx_<number>_keypoints.json
-		// so let us try...
-		int b = fn.rfind("_keypoints");
-		if( b != std::string::npos )
-		{
-			int a = fn.rfind("_", b-1);
-			if( a == std::string::npos )
-				a = 0;
-			
-			std::string numStr( fn.begin() + a + 1, fn.begin()+b );
-			num = atoi( numStr.c_str() );
-		}
+		int a = fn.rfind("_", b-1);
+		if( a == std::string::npos )
+			a = 0;
+		
+		std::string numStr( fn.begin() + a + 1, fn.begin()+b );
+		num = atoi( numStr.c_str() );
 	}
 	
 	if( num < 0 )
 	{
 		// we've not found it yet. Darn.
 		cout << "Don't know how to get a frame number from a filename of: " << fn << endl;
+		cout << "expecting filename of the form <something>_<number>_keypoints.json" << endl;
 		throw std::runtime_error("Can't parse frame number from filename.");
 	}
 	
@@ -35,7 +33,7 @@ int FNoFromJSONFilename( skeleton_t skelType, boost::filesystem::path pth )
 	
 }
 
-void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::vector< PersonPose > > &poses )
+void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > > &poses )
 {
 	std::vector< boost::filesystem::path > jsonFiles;
 	
@@ -70,7 +68,7 @@ void ReadPoseDirJSON( skeleton_t skelType, std::string dir, std::map< int, std::
 		//
 		// Parse the filename to figure out the frame number.
 		//
-		int frameNo = FNoFromJSONFilename( skelType, jsonFiles[fc] );
+		int frameNo = FNoFromJSONFilename( jsonFiles[fc] );
 		
 		//
 		// Load the data from the file.

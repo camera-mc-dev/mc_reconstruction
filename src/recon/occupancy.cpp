@@ -311,7 +311,11 @@ void OccupancyMap::PrecomputeLineProjections()
 	for( unsigned pc = 0; pc < settings.obsPlanes.size(); ++pc )
 	{
 		lineVisibility[pc] = cv::Mat( mapRows, mapCols, CV_32FC1, cv::Scalar(0) );
-		bufs[pc].resize( settings.calibs[pc].height * 1.25 );
+		
+		int bufSize = 0;
+		for( unsigned vc = 0; vc < settings.calibs.size(); ++vc )
+			bufSize = std::max( bufSize, (int)(settings.calibs[vc].height * 1.25) );
+		bufs[pc].resize( bufSize );
 		numPts[pc] = 0;
 	}
 	for( unsigned bc = 0; bc < groundPoints.size(); ++bc )
@@ -368,6 +372,7 @@ void OccupancyMap::PrecomputeLineProjections()
 								x(0) < settings.calibs[vc].width &&
 								x(1) < settings.calibs[vc].height  )
 							{
+								assert( pc < bufs.size() && pc < numPts.size() && numPts[pc] < bufs[pc].size() );
 								bufs[pc][numPts[pc]] = x;
 								++numPts[pc];
 								

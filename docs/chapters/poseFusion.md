@@ -62,7 +62,7 @@ First off, we find a single intersection point of all of those rays. We assume t
 
 Next we define an objective function which, when minimised, should result in us having 2 points at the intersections of the left and right ray subsets, without us having to explicitly identify what the line subsets are.
 
-We then minimise this objecting function using a non-linear search. Initial experience suggested that the best algorithm we have for this solve is our humble implementation of SDS. See the documentation for `mc_sds` for more information.
+We then minimise this objective function using a non-linear search. Initial experience suggested that the best algorithm we have for this solve is our humble implementation of SDS. See the documentation for `mc_sds` for more information.
 
 At the time of writing, the objective function is as follows:
 
@@ -83,7 +83,7 @@ We can consider many ways of resolving this, but ultimately, it is pose-dependen
 
 In the voting solve, we do a nearest-neighbour association of rays to points. As rays are labelled left or right by the detector they can now vote to give the points their final labelling. To make this more robust, we observe that labels from front and rear view cameras are more reliable than from side views. Thus we compute the dot product between the ray and the vector `p0p1` and weight the rays' votes based on the result, such that the more perpendicular the two vectors are, the stronger the vote.
 
-In the second case, we might know that the person is always facing parallel to some scene plane: e.g. always running along a track aligned with the scene y-axis. In that case we can make a reasonable inference about what is left and right based on the relative positions of the points and the specified scene plane. For instance, if the person always runs towards positive y, then we know that *right* corresponds to positive x, thus, we can determine right and left based on the x-position of `p0` and `p1`. Obviously, this approach can only be sane on poses where the is not a significant amount of twist in the body.
+In the second case, we might know that the person is always facing parallel to some scene plane: e.g. always running along a track aligned with the scene y-axis. In that case we can make a reasonable inference about what is left and right based on the relative positions of the points and the specified scene plane. For instance, if the person always runs towards positive y, then we know that *right* corresponds to positive x, thus, we can determine right and left based on the x-position of `p0` and `p1`. Obviously, this approach can only be sane on poses where there is not a significant amount of twist in the body.
 
 
 #### Future directions

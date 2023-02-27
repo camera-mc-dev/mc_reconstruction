@@ -33,7 +33,6 @@ using std::endl;
 // camera person associations for each frame.
 // 
 //
-//
 
 
 
@@ -52,7 +51,9 @@ struct SData
 	// [cam][frame][person]
 	std::vector< std::map< int, std::vector<PersonPose> > > pcPoses;
 	
-	skeleton_t skelType;
+	poseSource_t poseDataType;
+	Skeleton skeleton;
+	
 	
 	
 	// RANSAC settings for single joint reconstruction.
@@ -138,20 +139,24 @@ void ParseConfig( std::string cfgFile, SData &data )
 			}
 		}
 		
+		std::string s = (const char*)cfg.lookup("poseDataType");
+		if( s.compare("jsonDir") == 0 )  // directory of JSON files
+		{
+			data.poseDataType = POSE_JSON_DIR;
+		}
+		else if( s.compare("dlccsv") == 0 )
+		{
+			data.poseDataType = POSE_DLC_CSV;
+		}
+		else
+		{
+			cout << "can only load pose data from jsonDir or dlccsv" << endl;
+			cout << "got: " << s << endl;
+			exit(0);
+		}
 		
-		std::string s = (const char*)cfg.lookup("skelType");
-		if( s.compare("open") == 0 || s.compare("openpose") == 0 )
-		{
-			data.skelType = SKEL_OPOSE;
-		}
-		if( s.compare("alpha") == 0 || s.compare("alphapose") == 0 )
-		{
-			data.skelType = SKEL_APOSE;
-		}
-		if( s.compare("dlc") == 0 || s.compare("deeplabcut") == 0 )
-		{
-			data.skelType = SKEL_DLCUT;
-		}
+		s = (const char*)cfg.lookup("skeletonFile");
+		data.skeleton = Skeleton( s );
 		
 		
 		data.occSettings.minX = cfg.lookup("minX");
@@ -285,14 +290,13 @@ void LoadPoses( SData &data )
 	for( unsigned sc = 0; sc < data.poseSources.size(); ++sc )
 	{
 		// type of skeleton affects how we load data :(
-		switch( data.skelType )
+		switch( data.poseDataType )
 		{
-			case SKEL_OPOSE:
-			case SKEL_APOSE:
-				ReadPoseDirJSON( data.skelType, data.poseSources[sc], data.pcPoses[sc] );
+			case POSE_JSON_DIR:
+				ReadPoseDirJSON( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 			
-			case SKEL_DLCUT:
+			case POSE_DLC_CSV:
 				ReadDLC_CSV( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 		}
@@ -510,7 +514,7 @@ int main( int argc, char* argv[] )
 			//
 			// And then we use the relevant fusion method to get the 3D pose.
 			//
-			ReconstructPerson( pers3d, data.skelType, data.occSettings.calibs, data.minConf, data.lrd, data.minInliers, data.distanceThreshold );
+			ReconstructPerson( pers3d, data.skeleton, data.occSettings.calibs, data.minConf, data.lrd, data.minInliers, data.distanceThreshold );
 			
 			fusedFrames[ frame ] = pers3d;
 			
@@ -562,8 +566,14 @@ int main( int argc, char* argv[] )
 					cv::circle( img, cv::Point( p(0), p(1) ), 4, cv::Scalar( b,g,r ), 2 );
 					
 					// wont hurt to draw a line from obs to recon
-					hVec2D p2 = pers2d.joints[jc];
-					cv::line( img, cv::Point( p(0), p(1) ), cv::Point( p2(0), p2(1) ), cv::Scalar( b/2, g/2, r/2 ), 2 );
+					// NOTE: seems to be possible to have a view with no observations? Yes, of course it is.
+					if( pers2d.joints.size() == pers3d.joints.size() )
+					{
+						hVec2D p2 = pers2d.joints[jc];
+						if( (p2(0) > 0 || p2(1) > 0) && p2(2) > data.minConf ) // don't draw line to bad obs.
+							cv::line( img, cv::Point( p(0), p(1) ), cv::Point( p2(0), p2(1) ), cv::Scalar( b/2, g/2, r/2 ), 2 );
+					}
+					
 				}
 				
 				ren->SetBGImage(img);
@@ -627,7 +637,7 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 	
 	// basic text file output
 	std::ofstream outfi( tss.str() );
-	if( outfi )
+	if( !outfi )
 		cout << "Could not open : " << tss.str() << " for output." << endl;
 	
 	outfi << data.testRoot << endl;
@@ -659,51 +669,9 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 		c3d.parameter("POINT", pointRate);
 		
 		
-		int numPoints = 0;
-		std::map<int, std::string> pointNames;
-		if( data.skelType == SKEL_OPOSE )
-		{
-			pointNames[17] = "RIGHT_EAR";       pointNames[18] = "LEFT_EAR";
-			  pointNames[15] = "RIGHT_EYE";  pointNames[16] = "LEFT_EYE";
-			               pointNames[0] = "NOSE";
-			               pointNames[1] = "NECK";
-			pointNames[2] = "RIGHT_SHO";        pointNames[5] = "LEFT_SHO";
-			pointNames[3] = "RIGHT_ELBOW";      pointNames[6] = "LEFT_ELBOW";
-			pointNames[4] = "RIGHT_WRIST";      pointNames[7] = "LEFT_WRIST";
-			               pointNames[8] = "MIDHIP";
-			pointNames[9] = "RIGHT_HIP";        pointNames[12] = "LEFT_HIP";
-			pointNames[10] = "RIGHT_KNEE";      pointNames[13] = "LEFT_KNEE";
-			pointNames[11] = "RIGHT_ANKLE";     pointNames[14] = "LEFT_ANKLE";
-			pointNames[24] = "RIGHT_HEEL";      pointNames[21] = "LEFT_HEEL";
-			pointNames[22] = "RIGHT_MTP1";      pointNames[19] = "LEFT_MTP1";
-			pointNames[23] = "RIGHT_MTP5";      pointNames[20] = "LEFT_MTP5";
-		}
-		else if( data.skelType == SKEL_APOSE )
-		{
-			pointNames[16] = "RIGHT_EAR";       pointNames[17] = "LEFT_EAR";
-			  pointNames[14] = "RIGHT_EYE";  pointNames[15] = "LEFT_EYE";
-			               pointNames[0] = "NOSE";
-			               pointNames[1] = "NECK";
-			pointNames[2] = "RIGHT_SHO";        pointNames[5] = "LEFT_SHO";
-			pointNames[3] = "RIGHT_ELBOW";      pointNames[6] = "LEFT_ELBOW";
-			pointNames[4] = "RIGHT_WRIST";      pointNames[7] = "LEFT_WRIST";
-
-			pointNames[8] = "RIGHT_HIP";        pointNames[11] = "LEFT_HIP";
-			pointNames[9] = "RIGHT_KNEE";       pointNames[12] = "LEFT_KNEE";
-			pointNames[10] = "RIGHT_ANKLE";     pointNames[13] = "LEFT_ANKLE";
-		}
-		else if( data.skelType == SKEL_DLCUT )
-		{
-			               pointNames[13] = "FOREHEAD";
-			               pointNames[12] = "CHIN";
-			pointNames[8] = "RIGHT_SHO";        pointNames[9]  = "LEFT_SHO";
-			pointNames[7] = "RIGHT_ELBOW";      pointNames[10] = "LEFT_ELBOW";
-			pointNames[6] = "RIGHT_WRIST";      pointNames[11] = "LEFT_WRIST";
-
-			pointNames[2] = "RIGHT_HIP";        pointNames[3]  = "LEFT_HIP";
-			pointNames[1] = "RIGHT_KNEE";       pointNames[4]  = "LEFT_KNEE";
-			pointNames[0] = "RIGHT_ANKLE";      pointNames[5]  = "LEFT_ANKLE";
-		}
+		std::map<int, std::string> pointNames = data.skeleton.GetNames();
+		
+		
 		
 		for( auto pi = pointNames.begin(); pi != pointNames.end(); ++pi )
 		{
@@ -801,7 +769,7 @@ void SaveBody( std::map< int, PersonPose3D > &track, int trackNo, SData &data )
 						pt.x( ji->second(0) );
 						pt.y( ji->second(1) );
 						pt.z( ji->second(2) );
-						pt.residual(ji->second(3));
+						pt.residual(1.0f) ;//ji->second(3));
 					}
 					else
 					{

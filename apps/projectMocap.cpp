@@ -14,6 +14,7 @@
 #include "renderer2/renWrapper.h"
 
 #include "misc/c3d.h"
+#include "misc/trcLoader.h"
 #include "misc/tokeniser.h"
 
 #include <map>
@@ -132,7 +133,7 @@ int main(int argc, char* argv[])
 {
 	if( argc != 2 )
 	{
-		cout << "Tool to project .c3d files back to images" << endl;
+		cout << "Tool to project .c3d or .trc files back to images" << endl;
 		cout << "Usage:" << endl;
 		cout << argv[0] << " <config file> " << endl;
 		exit(0);
@@ -171,10 +172,31 @@ int main(int argc, char* argv[])
 	data.trackStartFrames.assign( data.trackFiles.size(), 0 );
 	for( auto tfc = 0; tfc < data.trackFiles.size(); ++tfc )
 	{
-		cout << "loading: " << data.trackFiles[tfc] << endl;
 		std::map< std::string, genMatrix > newTracks;
 		genMatrix newChannels;
-		LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks, newChannels );
+		
+		if( data.trackFiles[tfc].find(".c3d") != std::string::npos )
+		{
+			cout << "loading (c3d): " << data.trackFiles[tfc] << endl;
+			LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks, newChannels );
+		}
+		else if( data.trackFiles[tfc].find(".trc") > 0 != std::string::npos )
+		{
+			cout << "loading (trc): " << data.trackFiles[tfc] << endl;
+			LoadTRCFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
+			
+// 			transMatrix3D Ry = RotMatrix( 0, 1, 0, -3.14 );
+// 			transMatrix3D Sy = transMatrix3D::Identity();
+// 			Sy(1,1)          = -1.0f;
+// 			transMatrix3D Tr  = transMatrix3D::Identity();
+// 			Tr(1,3) = 300;
+// 			transMatrix3D M  = transMatrix3D::Identity();
+// 			for( auto ti = newTracks.begin(); ti != newTracks.end(); ++ti )
+// 			{
+// 				ti->second.block(0, 0, 4, ti->second.cols()) = M * ti->second.block(0, 0, 4, ti->second.cols());
+// 			}
+			
+		}
 		cout << "\tnew tracks: " << newTracks.size() << endl;
 		cout << "\tstart Frame: " << data.trackStartFrames[tfc] << endl;
 		for( auto ti = newTracks.begin(); ti != newTracks.end(); ++ti )
@@ -224,9 +246,10 @@ int main(int argc, char* argv[])
 	}
 	cout << "min elements: " << minElements << endl;
 	
-	cout << "channels: " << data.channels.rows() << " " << data.channels.cols() << " with max value: " << data.channels.maxCoeff() << endl;
+	cout << "channels: " << data.channels.rows() << " " << data.channels.cols();
 	if( data.channels.rows() > 0 && data.channels.cols() > 0 )
     {
+		 cout << " with max value: " << data.channels.maxCoeff() << endl;
 		// let's turn the channels data into a simple heatmap.
 		// I want there to be as many rows of this image as there are _video_ frames, except multiplied by
 		// the fact that we have 1000 Hz instead of 200 Hz
@@ -253,6 +276,7 @@ int main(int argc, char* argv[])
 	}
 	else
 	{
+		cout << " -> no data" << endl;
 		data.channelsHeatmap = cv::Mat( 1, data.channels.rows(), CV_32FC3, cv::Scalar(0) );
 	}
 	
@@ -336,7 +360,7 @@ int main(int argc, char* argv[])
 	std::ofstream outfi( oss.str() );
 	
 	cind = 0;
-	bool paused = false;
+	bool paused = true;
 	int camChange = 0;
 	int frameAdvance = 0;
 	
@@ -365,15 +389,19 @@ int main(int argc, char* argv[])
 		{
 			img = data.sources[ ind2id[cind] ]->GetCurrent().clone();
 			
+			hVec3D O,X,Y,Z;
+			O << 0  ,0  ,  0,1.0f;  hVec2D o = calib.Project( O );
+			X << 500,0  ,  0,1.0f;  hVec2D x = calib.Project( X );
+			Y << 0  ,500,  0,1.0f;  hVec2D y = calib.Project( Y );
+			Z << 0  ,0  ,500,1.0f;  hVec2D z = calib.Project( Z );
+			cv::line( img, cv::Point( o(0), o(1) ), cv::Point( x(0), x(1) ), cv::Scalar(  0,  0,255), 2 );
+			cv::line( img, cv::Point( o(0), o(1) ), cv::Point( y(0), y(1) ), cv::Scalar(  0,255,0), 2 );
+			cv::line( img, cv::Point( o(0), o(1) ), cv::Point( z(0), z(1) ), cv::Scalar(255,  0,0), 2 );
+			
 			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
 			{
 				if( mfc-2 < 0 || mfc+2 >=  ti->second.cols() )
 					continue;
-				
-				if( ti->first.find("nose") >= 0 )
-				{
-					cout << ti->second.col( mfc    ).transpose() << endl;
-				}
 				
 				hVec2D a = calib.Project( ti->second.col( mfc-2  ).head(4) );
 				hVec2D b = calib.Project( ti->second.col( mfc-1  ).head(4) );
@@ -385,6 +413,15 @@ int main(int argc, char* argv[])
 				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), cv::Scalar(255,  0,   0), 2);
 				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
 				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
+				
+				
+				if( ti->first.find("Neck") != std::string::npos )
+				{
+					cout << ti->second.col( mfc    ).transpose() << endl;
+					cout << b.transpose() << endl;
+					cout << c.transpose() << endl;
+					cout << d.transpose() << endl;
+				}
 				
 			}
 			
@@ -437,6 +474,7 @@ int main(int argc, char* argv[])
 			if( data.renderHeadless )
 			{
 				done = renWrapper->StepEventLoop();
+				frameAdvance = 1;
 			}
 			else
 			{
