@@ -798,27 +798,29 @@ int main(int argc, char* argv[])
 	
 	
 	
-	if( data.visualise )
+	
+	for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
 	{
-		for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
+		for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
 		{
-			for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
+			for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
 			{
-				for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
-				{
-					float &p = bd.at<float>( rc*10 + rc2, cc );
-					p = bd2OnG(rc,cc);
-				}
-				for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
-				{
-					float &p = bd.at<float>( rc*10 + rc2, cc );
-					p = bd2OffG(rc,cc);
-				}
+				float &p = bd.at<float>( rc*10 + rc2, cc );
+				p = bd2OnG(rc,cc);
+			}
+			for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
+			{
+				float &p = bd.at<float>( rc*10 + rc2, cc );
+				p = bd2OffG(rc,cc);
 			}
 		}
+	}
+	if(data.visualise)
+	{
 		Rendering::ShowImage(bd, 1500);
 	}
-	
+	std::stringstream bdss; bdss << data.dataRoot << data.testRoot << "cvf.png";
+	SaveImage( bd, bdss.str() );
 	
 	
 	
@@ -867,27 +869,29 @@ int main(int argc, char* argv[])
 	
 	
 	
-	if( data.visualise )
+	for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
 	{
-		for( unsigned rc = 0; rc < bd2On.rows(); ++rc )
+		for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
 		{
-			for( unsigned cc = 0; cc < bd2On.cols(); ++cc )
+			for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
 			{
-				for( unsigned rc2 = 0; rc2 < 5; ++rc2 )
-				{
-					float &p = bd.at<float>( rc*10 + rc2, cc );
-					p = peakOn2(rc,cc);
-				}
-				for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
-				{
-					float &p = bd.at<float>( rc*10 + rc2, cc );
-					p = peakOff2(rc,cc);
-				}
+				float &p = bd.at<float>( rc*10 + rc2, cc );
+				p = peakOn2(rc,cc);
+			}
+			for( unsigned rc2 = 5; rc2 < 10; ++rc2 )
+			{
+				float &p = bd.at<float>( rc*10 + rc2, cc );
+				p = peakOff2(rc,cc);
 			}
 		}
-		Rendering::ShowImage(bd, 1500);
 	}
+	if( data.visualise )
+		Rendering::ShowImage(bd, 1500);
 	
+	std::stringstream pkss; pkss << data.dataRoot << data.testRoot << "pks.png";
+	SaveImage( bd, pkss.str() );
+	
+
 	
 	//
 	// I _really_ hate the ugly mess that I've used previously here, even though I know I've done a load 
@@ -1051,7 +1055,7 @@ int main(int argc, char* argv[])
 	std::vector<float> offErrs;
 	for( unsigned offset0 = blinkSignal.rows() / 2; offset0 < flashSignal.rows() + data.maxBlinkSignalLag; ++offset0 )
 	{
-		float d = 0.0f;
+		std::vector<float> d;
 		int cnt = 0;
 		for( unsigned c = 0; c < blinkSignal.rows(); ++c )
 		{
@@ -1059,25 +1063,23 @@ int main(int argc, char* argv[])
 			float e = bsp(1, c + offset0);
 			if( blinkSignal(c) > 0 && (s>=0 || e>=0) )
 			{
-				d += bsp(0, c + offset0);
-				++cnt;
+				d.push_back( bsp(0, c + offset0) );
 			}
 			else if( blinkSignal(c) < 0 && (s>=0 || e>=0))
 			{
-				d += bsp(1, c + offset0);
-				++cnt;
+				d.push_back( bsp(1, c + offset0) );
 			}
 		}
-		if( cnt > 2 )
+		if( d.size() > 2 )
 		{
-			d /= cnt;
-			offErrs.push_back(d);
+			std::sort(d.begin(), d.end());
+			offErrs.push_back(d[d.size()/2]);
 		}
 		else
 		{
 			offErrs.push_back(9999);
 		}
-		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << cnt <<  " : " << d << " " << offErrs.back() << endl;
+		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << d.size() <<  " : " << d[d.size()/2] << " " << offErrs.back() << endl;
 	}
 	
 	std::vector<float> offErrsCopy = offErrs;
@@ -1132,7 +1134,7 @@ int main(int argc, char* argv[])
 	//       puts us one frame late. If we put this +1 in, the blink and flash _start_ at the same time,
 	//       even though the flash can often linger a frame longer. Some of this all comes down to just 
 	//       exactly how Qualsys processed the flashing led... perhaps...
-	int finalOffset = -(minOffset0 - blinkSignal.rows()) + 1;
+	int finalOffset = -(minOffset0 - blinkSignal.rows()); // + 1;
 
 	cout << "final offset: " << finalOffset << endl;
 	
