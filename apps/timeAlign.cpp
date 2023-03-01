@@ -143,41 +143,68 @@ void CrossViewFilter( genMatrix inData, genMatrix &out )
 	}
 }
 
-void PeakDetect( genMatrix inData, genMatrix &out )
+void PeakDetect( genMatrix inData, genMatrix &out, bool offToOn )
 {
 	out = genMatrix::Zero( inData.rows(), inData.cols() );
 	float thr = (inData.mean() + inData.maxCoeff()) / 2.0f;
 	cout << "inData m, mn, M: " << inData.minCoeff() << " " << inData.mean() << " " << inData.maxCoeff() << endl;
+	std::ofstream plog( "peak.log" );
 	for( unsigned rc = 0; rc < inData.rows(); ++rc )
 	{
 		int peakStart = -1;
 		for( unsigned cc = 0; cc < inData.cols(); ++cc )
 		{
 			if(
-			    inData(rc,cc) > thr            && 
+			    inData(rc,cc) > thr             && 
 			    inData(rc,cc) > inData(rc,cc-3) &&
-			    inData(rc,cc) > inData(rc,cc+3) 
+			    inData(rc,cc) > inData(rc,cc+3)
 			  )
 			{
 				out(rc,cc) = 1.0f;
 				if( peakStart < 0 )
 					peakStart = cc;
 			}
-			else
+			else if( peakStart >= 0 )
 			{
 				int peakEnd = cc;
 				if( peakEnd - peakStart > 1 )
 				{
+					plog << "wide peak : " << peakStart << " -> " << peakEnd << endl << "\t";
+					if( offToOn )
+						plog << "offToOn" << endl;
+					else
+						plog << "onToOff" << endl;
 					float peakLoc = 0.0f;
 					float wsum    = 0.0f;
 					for( unsigned cc2 = peakStart; cc2 < peakEnd; ++cc2 )
 					{
-						peakLoc += inData(rc,cc) * cc2;
-						wsum    += inData(rc,cc);
+						//
+						// The weight of each part of the peak is probably equal, so
+						// the mean we calculate here always ends up in the middle. Which is fine.
+						// _But_ it almost always seems to be an onToOff, and it feels like it is
+						// always pulling thing too late, so we're trying to pull it earlier with
+						// an augmentation of the weight and by using the floor on the average.
+						//
+						float w = inData(rc,cc);
+						float aug = 0.0f;
+						if( !offToOn )
+						{
+							aug = (peakEnd-1.0f-cc2) / (float)(peakEnd-peakStart);
+						}
+						else
+						{
+							aug = (cc2-peakStart) / (float)(peakEnd-peakStart);
+						}
+						plog << cc2 << "(" << w << ", " << aug << ") ";
+						peakLoc += (w+aug) * cc2;
+						wsum    += (w+aug);
 					}
+					plog << endl;
 					
 					peakLoc /= wsum;
-					peakLoc = round(peakLoc);
+					plog << "\t" << peakLoc << " -> ";
+					peakLoc = floor(peakLoc);
+					plog << peakLoc << endl;
 					
 					
 					for( unsigned cc = peakStart; cc < peakEnd; ++cc )
@@ -804,8 +831,8 @@ int main(int argc, char* argv[])
 	// as well as a local peak filter.
 	//
 	genMatrix peakOn, peakOff;
-	PeakDetect(  bd2OnG, peakOn );
-	PeakDetect( bd2OffG, peakOff );
+	PeakDetect(  bd2OnG,  peakOn,  true );
+	PeakDetect( bd2OffG, peakOff, false );
 	
 	
 	
@@ -1101,7 +1128,11 @@ int main(int argc, char* argv[])
 	
 	
 	// which means that our best offset is at...
-	int finalOffset = -(minOffset0 - blinkSignal.rows());
+	// NOTE: The +1 is a bit arbitrary. When we _look_ at the alignImg it seems like the solve 
+	//       puts us one frame late. If we put this +1 in, the blink and flash _start_ at the same time,
+	//       even though the flash can often linger a frame longer. Some of this all comes down to just 
+	//       exactly how Qualsys processed the flashing led... perhaps...
+	int finalOffset = -(minOffset0 - blinkSignal.rows()) + 1;
 
 	cout << "final offset: " << finalOffset << endl;
 	
@@ -1127,9 +1158,37 @@ int main(int argc, char* argv[])
 	finalfi << "extraOffset = offset - baseOffset (there's a chance this might be constant between trials)" << endl;
 	
 	
+	//
+	// I want to render the bright data with an overlay of the mocap led data, at the final alignment.
+	//
+	cv::Mat alignImg( brightData.rows()*10, brightData.cols(), CV_32FC3, cv::Scalar(0.0f) );
+	cout << "bd cv shape: " << bd.rows << " " << bd.cols << endl;
+	for( unsigned rc = 0; rc < brightData.rows(); ++rc )
+	{
+		for( unsigned cc = 0; cc < brightData.cols(); ++cc )
+		{
+			for( unsigned rc2 = 0; rc2 < 10; ++rc2 )
+			{
+				cv::Vec3f &p = alignImg.at<cv::Vec3f>( rc*10 + rc2, cc );
+				p[0] = brightData(rc,cc);
+				
+				if( cc + finalOffset > 0 && cc + finalOffset < data.tracks[ledName].cols() )
+					p[1] = data.tracks[ledName].col( cc + finalOffset ).head(3).norm();
+				
+			}
+		}
+	}
+	std::stringstream aiss;
+	aiss << data.dataRoot << "/" << data.testRoot << "/talign.png";
+	SaveImage( alignImg, aiss.str() );
+	
 	
 	if( data.visualise )
 	{
+		if( data.visualise )
+			Rendering::ShowImage(alignImg, 1500);
+		
+		
 		//
 		// Final render
 		//
@@ -1190,22 +1249,28 @@ int main(int argc, char* argv[])
 				hVec2D d = calib.Project( ti->second.col( fc+1 + finalOffset ).head(4) );
 				hVec2D e = calib.Project( ti->second.col( fc+2 + finalOffset ).head(4) );
 				
-				cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), cv::Scalar(128,  0,   0), 2);
-				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), cv::Scalar(255,  0,   0), 2);
-				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
-				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
+// 				cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), cv::Scalar(128,  0,   0), 2);
+// 				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), cv::Scalar(255,  0,   0), 2);
+// 				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
+// 				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
 			}
 			
 			
-// 			//
-// 			// Draw all markers
-// 			//
-// 			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
-// 			{
-// 				hVec2D bcp = calib.Project( ti->second.col( fc + finalOffset ).head(4) );
-// 				cv::circle( img, cv::Point( bcp(0), bcp(1) ), 15, cv::Scalar(0,255,0), 2 );
-// 				
-// 			}
+			//
+			// Draw all markers
+			//
+			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
+			{
+				if( fc-2 + finalOffset < 0 || fc+2 + finalOffset >=  ti->second.cols() )
+					continue;
+				
+				if( ti->first.compare(ledName) == 0 )
+					continue;
+				
+				hVec2D bcp = calib.Project( ti->second.col( fc + finalOffset ).head(4) );
+				cv::circle( img, cv::Point( bcp(0), bcp(1) ), 5, cv::Scalar(0,255,0), 2 );
+				
+			}
 			
 			
 			//
