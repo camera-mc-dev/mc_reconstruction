@@ -1082,7 +1082,7 @@ int main(int argc, char* argv[])
 	
 	std::vector<float> offErrsCopy = offErrs;
 	std::sort( offErrsCopy.begin(), offErrsCopy.end() );
-	float medErr = offErrsCopy[ offErrsCopy.size() * 0.3 ];
+	float medErr = offErrsCopy[ offErrsCopy.size() * 0.5 ];
 	float thrErr = (medErr + offErrsCopy[0]) / 2.0f;
 	int minOffset0;
 	{
@@ -1173,7 +1173,7 @@ int main(int argc, char* argv[])
 				p[0] = brightData(rc,cc);
 				
 				if( cc + finalOffset > 0 && cc + finalOffset < data.tracks[ledName].cols() )
-					p[1] = data.tracks[ledName].col( cc + finalOffset ).head(3).norm();
+					p[1] = 10 < data.tracks[ledName].col( cc + finalOffset ).head(3).norm();
 				
 			}
 		}
