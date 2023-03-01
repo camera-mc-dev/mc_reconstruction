@@ -393,12 +393,20 @@ int main(int argc, char* argv[])
 	
 	cout << "track names: " << endl;
 	unsigned long minElements = 99999999;
+	unsigned long maxElements = 0;
 	for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
 	{
 		minElements = std::min( minElements, (unsigned long)ti->second.cols() );
+		maxElements = std::max( maxElements, (unsigned long)ti->second.cols() );
 		cout << "\t" << ti->first << " " << ti->second.cols() << endl;
 	}
 	cout << "min elements: " << minElements << endl;
+	cout << "max elements: " << maxElements << endl;
+	if( minElements != maxElements )
+	{
+		cout << "not all tracks have the same length, assuming that's a bad thing and quitting." << endl;
+		return(-1);
+	}
 	
 	std::string ledName;
 	if( data.tracks.find("blinky") != data.tracks.end() )
