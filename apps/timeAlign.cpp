@@ -59,10 +59,10 @@ void GetSources( SData &data );
 
 void FilterFlashOn(genMatrix brightData, genMatrix &out )
 {
-	Eigen::VectorXf filter(30);
+	Eigen::VectorXf filter(29);
 	for( unsigned cc = 0; cc < filter.rows(); ++cc )
 	{
-		if( cc < filter.rows()/2 ) filter(cc) = -1.0f;
+		if( cc <= filter.rows()/2 ) filter(cc) = -1.0f;
 		else filter(cc) = 1.0f;
 	}
 	out = genMatrix::Zero( brightData.rows(), brightData.cols() );
@@ -78,10 +78,10 @@ void FilterFlashOn(genMatrix brightData, genMatrix &out )
 }
 void FilterFlashOff(genMatrix brightData, genMatrix &out )
 {
-	Eigen::VectorXf filter(30);
+	Eigen::VectorXf filter(29);
 	for( unsigned cc = 0; cc < filter.rows(); ++cc )
 	{
-		if( cc < filter.rows()/2 ) filter(cc) = 1.0f;
+		if( cc <= filter.rows()/2 ) filter(cc) = 1.0f;
 		else filter(cc) = -1.0f;
 	}
 	out = genMatrix::Zero( brightData.rows(), brightData.cols() );
@@ -160,7 +160,6 @@ void PeakDetect( genMatrix inData, genMatrix &out, bool offToOn )
 			    inData(rc,cc) > inData(rc,cc+3)
 			  )
 			{
-				out(rc,cc) = 1.0f;
 				if( peakStart < 0 )
 					peakStart = cc;
 			}
@@ -206,12 +205,13 @@ void PeakDetect( genMatrix inData, genMatrix &out, bool offToOn )
 					peakLoc = floor(peakLoc);
 					plog << peakLoc << endl;
 					
+					out( rc, peakLoc ) = 1.0f;
 					
-					for( unsigned cc = peakStart; cc < peakEnd; ++cc )
-					{
-						if(cc != peakLoc)
-							out(cc) = 0;
-					}
+				}
+				else
+				{
+					plog << "narrow peak : " << peakStart << endl << "\t";
+					out( rc, peakStart ) = 1.0f;
 				}
 				peakStart = -1;
 			}
@@ -1080,6 +1080,10 @@ int main(int argc, char* argv[])
 			offErrs.push_back(9999);
 		}
 		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << d.size() <<  " : " << d[d.size()/2] << " " << offErrs.back() << endl;
+		cout << "\t\t:";
+		for( unsigned dc = 0; dc < d.size(); ++dc )
+			cout << " " << d[dc];
+		cout << endl;
 	}
 	
 	std::vector<float> offErrsCopy = offErrs;
@@ -1092,31 +1096,41 @@ int main(int argc, char* argv[])
 		int s, m, e;
 		s = e = m = -1;
 		float minErr = 9999.99f;
+		float cnt;
 		for( unsigned ec = 0; ec < offErrs.size(); ++ec )
 		{
 			if( offErrs[ec] < thrErr )
 			{
 				s = ec;
 				if( s < 0 )
+				{
+					cnt = 1;
 					minErr = offErrs[ec];
+				}
 				else
 				{
 					if( offErrs[ec] < minErr )
 					{
 						minErr = offErrs[ec];
 						m = ec;
+						cnt = 1;
+					}
+					else if( offErrs[ec] == minErr )
+					{
+						m += ec;
+						cnt += 1.0f;
 					}
 				}
 			}
 			else if( s >= 0 )
 			{
-				offMins.push_back( m );
+				offMins.push_back( round( m/cnt ) );
 				s = -1;
 				m = -1;
 				minErr = 9999.99f;
 			}
 			
-			cout << ec << " ( " << ec + blinkSignal.rows()/2 << " ) : " << medErr << " ? " << offErrs[ec] << " : " << (offErrs[ec] < medErr) << " <> " << m << endl;
+// 			cout << ec << " ( " << ec + blinkSignal.rows()/2 << " ) : " << medErr << " ? " << offErrs[ec] << " : " << (offErrs[ec] < medErr) << " <> " << cnt << " " << m / cnt << endl;
 		}
 		
 		cout << "got " << offMins.size() << " possible offsets: " << endl;
