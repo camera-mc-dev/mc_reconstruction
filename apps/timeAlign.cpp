@@ -48,7 +48,7 @@ struct SData
 	
 	bool visualise;
 	bool usePrevious;
-	int  extraFrameOverlap;
+	int  maxBlinkSignalLag;
 	std::string brightDataFilename;
 	
 };
@@ -101,7 +101,7 @@ void CrossViewFilter( genMatrix inData, genMatrix &out )
 	out = inData;
 	
 	Eigen::VectorXf gscv;
-	float numRpt = 10.0f;
+	float numRpt = 5.0f;
 	for(unsigned rpt = 0; rpt < numRpt; ++rpt )
 	{
 		// create the gaussian filter.
@@ -109,7 +109,8 @@ void CrossViewFilter( genMatrix inData, genMatrix &out )
 		{
 			float x = cc - 30.0;
 			float sig = 5.0f; //(11-rpt);
-			gfilter(cc) = exp( -(x*x)/(sig*sig)  );
+			//gfilter(cc) = exp( -(x*x)/(sig*sig)  );
+			gfilter(cc) = exp( -pow( abs(x), 0.8 ) / 0.3 );
 			cout << std::setw(6) << std::fixed << std::setprecision(2) << gfilter(cc);
 		}
 		float gsc = gfilter.array().sum();
@@ -274,7 +275,7 @@ int main(int argc, char* argv[])
 	{
 		cout << "Tool to try and get calibration alignment between camera system and mocap system." << endl;
 		cout << "Usage:" << endl;
-		cout << argv[0] << " <config file> |< extra overlap frames > <use previous (0 = false,1=true)|" << endl;
+		cout << argv[0] << " <config file> | <use previous (0 = false,1=true)|" << endl;
 		exit(0);
 	}
 	
@@ -282,18 +283,9 @@ int main(int argc, char* argv[])
 	ParseConfig( argv[1], data );
 	GetSources( data );
 	
-	if( argc >= 3 )
+	if( argc == 3 )
 	{
-		data.extraFrameOverlap = atoi( argv[2] );
-	}
-	else
-	{
-		data.extraFrameOverlap = 300;
-	}
-	
-	if( argc == 4 )
-	{
-		data.usePrevious = atoi( argv[3] ) == 1;
+		data.usePrevious = atoi( argv[2] ) == 1;
 	}
 	else
 	{
@@ -1018,13 +1010,19 @@ int main(int argc, char* argv[])
 	// of repeating pattern to the flash, making it non-unique across the sequence.
 	// Which we were for BioCV.
 	//
-	// In that case there could be multiple best fits. In which case, we want the 
-	// last one... which means a nice simple loop to find the overall minimum error 
-	// is not enough - we have to allow for multiple solutions.
+	// In that case there could be multiple best fits - so find them all.
 	//
+	// To find the best fits, we're going to slide the blink signal over the flash signal
+	// which is to say, the markers over the image signal.
+	//
+	// We "know" that the blink signal wont end _that_ long after the flash signal - typically
+	// just a few frames. So we prevent going too far beyond the end of the flash signal.
+	//
+	// We can specify how much the end of the blink signal allowed to lag the end of the flash signal
+	// in the config option: maxBlinkSignalLag
 	
 	std::vector<float> offErrs;
-	for( unsigned offset0 = blinkSignal.rows() / 2; offset0 < blinkSignal.rows() + flashSignal.rows()/2; ++offset0 )
+	for( unsigned offset0 = blinkSignal.rows() / 2; offset0 < flashSignal.rows() + data.maxBlinkSignalLag; ++offset0 )
 	{
 		float d = 0.0f;
 		int cnt = 0;
@@ -1052,12 +1050,12 @@ int main(int argc, char* argv[])
 		{
 			offErrs.push_back(9999);
 		}
-		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows() << " ) : "  << cnt <<  " : " << d << " " << offErrs.back() << endl;
+		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << cnt <<  " : " << d << " " << offErrs.back() << endl;
 	}
 	
 	std::vector<float> offErrsCopy = offErrs;
 	std::sort( offErrsCopy.begin(), offErrsCopy.end() );
-	float medErr = offErrsCopy[ offErrsCopy.size() * 0.25 ];
+	float medErr = offErrsCopy[ offErrsCopy.size() * 0.3 ];
 	float thrErr = (medErr + offErrsCopy[0]) / 2.0f;
 	int minOffset0;
 	{
@@ -1089,7 +1087,7 @@ int main(int argc, char* argv[])
 				minErr = 9999.99f;
 			}
 			
-			cout << ec << " : " << medErr << " ? " << offErrs[ec] << " : " << (offErrs[ec] < medErr) << " <> " << m << endl;
+			cout << ec << " ( " << ec + blinkSignal.rows()/2 << " ) : " << medErr << " ? " << offErrs[ec] << " : " << (offErrs[ec] < medErr) << " <> " << m << endl;
 		}
 		
 		cout << "got " << offMins.size() << " possible offsets: " << endl;
@@ -1308,6 +1306,13 @@ void ParseConfig( std::string configFile, SData &data )
 				data.calibFiles.push_back(s);
 			}
 		}
+		
+		if( cfg.exists("maxBlinkSignalLag") )
+		{
+			data.maxBlinkSignalLag = cfg.lookup("maxBlinkSignalLag");
+		}
+		else
+			data.maxBlinkSignalLag = 50;
 		
 		
 		data.lowMedian = 0.25;
