@@ -393,14 +393,16 @@ int main(int argc, char* argv[])
 	
 	cout << "track names: " << endl;
 	unsigned long minElements = 99999999;
+	unsigned long maxElements = 0;
 	for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
 	{
 		minElements = std::min( minElements, (unsigned long)ti->second.cols() );
+		maxElements = std::max( maxElements, (unsigned long)ti->second.cols() );
 		cout << "\t" << ti->first << " " << ti->second.cols() << endl;
 	}
-	cout << "min elements: " << minElements << endl;
 	
-	std::string ledName;
+	
+	std::string ledName = "";
 	if( data.tracks.find("blinky") != data.tracks.end() )
 	{
 		ledName = "blinky";
@@ -476,6 +478,33 @@ int main(int argc, char* argv[])
 		else
 		{
 			cout << "we do." << endl;
+		}
+	}
+	
+	cout << "min elements: " << minElements << endl;
+	cout << "max elements: " << maxElements << endl;
+	if( minElements != maxElements )
+	{
+		cout << "not all tracks have the same length..." << endl;
+		
+		cout << "do we have an led track?" << endl;
+		if( ledName.size() > 1 )
+		{
+			cout << "yes: " << ledName << " with len: " << data.tracks[ledName].cols() << endl;
+			
+			cout << "is that the 'long' track?";
+			if( data.tracks[ledName].cols() == maxElements )
+			{
+				cout << "yes.. so chop the front off and see if that works" << endl;
+				genMatrix tmp = data.tracks[ledName].block( 0, maxElements-minElements, data.tracks[ledName].rows(), minElements );
+				data.tracks[ledName] = tmp;
+				cout << ledName << " is now length: " << data.tracks[ledName].cols() << endl;
+			}
+			else
+			{
+				cout << "no.. could pad the front... but... don't have a test right now." << endl;
+				exit(-1);
+			}
 		}
 	}
 	
@@ -1073,16 +1102,17 @@ int main(int argc, char* argv[])
 		if( d.size() > 2 )
 		{
 			std::sort(d.begin(), d.end());
-			offErrs.push_back(d[d.size()/2]);
+			float idx = 0.5 * d.size();
+			offErrs.push_back(d[idx]);
 		}
 		else
 		{
 			offErrs.push_back(9999);
 		}
-		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << d.size() <<  " : " << d[d.size()/2] << " " << offErrs.back() << endl;
-		cout << "\t\t:";
-		for( unsigned dc = 0; dc < d.size(); ++dc )
-			cout << " " << d[dc];
+		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << d.size() <<  " : " << offErrs.back() << endl;
+// 		cout << "\t\t:";
+// 		for( unsigned dc = 0; dc < d.size(); ++dc )
+// 			cout << " " << d[dc];
 		cout << endl;
 	}
 	
