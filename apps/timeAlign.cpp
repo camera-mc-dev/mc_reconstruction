@@ -51,6 +51,8 @@ struct SData
 	int  maxBlinkSignalLag;
 	std::string brightDataFilename;
 	
+	int defaultExtraOffset;
+	
 };
 
 void ParseConfig( std::string configFile, SData &data );
@@ -420,11 +422,13 @@ int main(int argc, char* argv[])
 			cout << "user asked for channel " << data.useChannel << endl;
 			cout << "so, we can't use channel data either." << endl << endl;
 			
-			cout << "can try -7 guess?" << endl;
+			cout << "Can we try an 'extraOffset' guess?" << endl;
 			
 			// can we try the -7 guess? Only if there are other markers.
 			if( data.tracks.empty() )
 			{
+				cout << "no, we don't have any other markers. Sorry." << endl;
+				
 				std::stringstream ss;
 				ss << data.dataRoot << data.testRoot << "/frameOffset";
 				cout << "saving offset to: " << ss.str() << endl;
@@ -451,28 +455,21 @@ int main(int argc, char* argv[])
 			int numVidFrames = data.sources.begin()->second->GetNumImages();
 			int numMocapFrames = data.tracks.begin()->second.cols();
 			int baseOffset = numMocapFrames - numVidFrames;
-			int extraOffset = -7;
+			
 			
 			std::stringstream ss;
 			ss << data.dataRoot << data.testRoot << "/frameOffset";
 			cout << "saving offset to: " << ss.str() << endl;
 			std::ofstream finalfi(ss.str());
-			finalfi << "offset: " << baseOffset + extraOffset << endl << endl;
-			finalfi << "numVidFrames: " << numVidFrames << endl;
-			finalfi << "numMocapFrames: " << numMocapFrames << endl;
-			finalfi << "baseOffset: " << numMocapFrames - numVidFrames << endl;
-			finalfi << "extraOffset: " << extraOffset << endl << endl << endl;
+			finalfi << "offset: " << minElements - numVidFrames + data.defaultExtraOffset << endl;
+			finalfi << "extraOffset: " << data.defaultExtraOffset << endl << endl << endl;
 			finalfi << "--- info ---" << endl;
 			finalfi << "mocap frame = video frame + offset" << endl;
-			finalfi << "numVidFrames is number of video frames in sequence" << endl;
-			finalfi << "numMocapFrames is number of mocap frames in sequence" << endl;
-			finalfi << "baseOffset = numMocapFrames - numVidFrames (in theory, both stop at the same time)" << endl;
-			finalfi << "extraOffset = offset - baseOffset (there's a chance this might be constant between trials)" << endl;
-			finalfi << endl;
-			finalfi << "!!! Guessed offset from a fairly typical -7 extra offset !!!" << endl;
+			finalfi << "offset has been set based on default extra offset." << endl;
 			finalfi.close();
 			
-			throw std::runtime_error( "Can't recognise name of LED marker in any loaded .c3d files, and no other marker tracks to guess with. " );
+			cout << "Set offset using default extraOffset" << endl;
+			return 1;
 			
 		}
 		else
@@ -1455,6 +1452,12 @@ void ParseConfig( std::string configFile, SData &data )
 			libconfig::Setting &flasherPosSetting = cfg.lookup("flasherPos");
 			assert( flasherPosSetting.getLength() == 4 );
 			data.flasherPos << flasherPosSetting[0], flasherPosSetting[1], flasherPosSetting[2], flasherPosSetting[3];
+		}
+		
+		data.defaultExtraOffset = -7;
+		if( cfg.exists("defaultExtraOffset") )
+		{
+			data.defaultExtraOffset = cfg.lookup("defaultExtraOffset");
 		}
 		
 		if( cfg.exists("visualise") )
