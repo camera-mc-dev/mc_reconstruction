@@ -371,7 +371,11 @@ int main(int argc, char* argv[])
 			else
 			{
 				cout << "Track " << ti->first << " from " << data.trackFiles[tfc] << " already exists from other file?" << endl;
-				exit(0);
+				cout << "ignoring..." << endl;
+				cout << "existing: " << data.tracks[ ti->first ].cols() << endl;
+				cout << "ignored : " << ti->second.cols() << endl;
+				continue;
+				// exit(0);
 			}
 		}
 		
@@ -405,8 +409,7 @@ int main(int argc, char* argv[])
 	cout << "max elements: " << maxElements << endl;
 	if( minElements != maxElements )
 	{
-		cout << "not all tracks have the same length, assuming that's a bad thing and quitting." << endl;
-		return(-1);
+		cout << "not all tracks have the same length... will _try_ to handle..." << endl;
 	}
 	
 	
@@ -1090,7 +1093,7 @@ int main(int argc, char* argv[])
 	// in the config option: maxBlinkSignalLag
 	
 	std::vector<float> offErrs;
-	for( unsigned offset0 = blinkSignal.rows() / 2; offset0 < flashSignal.rows() + data.maxBlinkSignalLag; ++offset0 )
+	for( unsigned offset0 = flashSignal.rows() / 2; offset0 < flashSignal.rows() + data.maxBlinkSignalLag; ++offset0 )
 	{
 		std::vector<float> d;
 		int cnt = 0;
