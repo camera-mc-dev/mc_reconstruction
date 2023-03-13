@@ -302,32 +302,38 @@ int main(int argc, char* argv[])
 		++cind;
 	}
 	
-	
 	cout << data.offsetFile << endl;
-	std::ifstream infi( data.offsetFile );
-	std::string type;
-	infi >> type;
-	if( type.compare("offset:") == 0 )
+	if( data.offsetFile.compare("NO_OFFSET_FILE") == 0 )
 	{
-		infi >> data.mocapOffset;
-		cout << type << " " << data.mocapOffset << endl;
+		data.mocapOffset = 0;
 	}
-	else if( type.compare("extraOffset:") == 0 )
+	else
 	{
-		int eo;
-		infi >> eo;
-// 		eo = -9; // fuck it...
-		data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
-		cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
-		
-		infi.close();
-		std::ofstream outfi(data.offsetFile);
-		
-		outfi << "offset: " << data.mocapOffset << endl;
-		outfi << "extraOffset: " << eo << endl;
-		outfi << endl;
-		outfi << "-------------" << endl;
-		outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
+		std::ifstream infi( data.offsetFile );
+		std::string type;
+		infi >> type;
+		if( type.compare("offset:") == 0 )
+		{
+			infi >> data.mocapOffset;
+			cout << type << " " << data.mocapOffset << endl;
+		}
+		else if( type.compare("extraOffset:") == 0 )
+		{
+			int eo;
+			infi >> eo;
+	// 		eo = -9; // fuck it...
+			data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
+			cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
+			
+			infi.close();
+			std::ofstream outfi(data.offsetFile);
+			
+			outfi << "offset: " << data.mocapOffset << endl;
+			outfi << "extraOffset: " << eo << endl;
+			outfi << endl;
+			outfi << "-------------" << endl;
+			outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
+		}
 	}
 	
 	
@@ -353,6 +359,40 @@ int main(int argc, char* argv[])
 			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
 		}
 	}
+	
+	
+	std::ofstream ptest("ptest");
+	hVec3D p,o,x;
+	o << 0,0,0,1.0f;
+	x << 1,0,0,1.0f;
+	for( float y = -3000; y < 3001; y += 500 )
+	{
+		p << 0, y, 1000, 1.0f;
+		ptest << p.transpose() << endl;
+		for( auto si = data.sources.begin(); si != data.sources.end(); ++si )
+		{
+			ptest << si->first << " : ";
+			hVec3D co = si->second->GetCalibration().TransformToWorld(o);
+			hVec3D cx = si->second->GetCalibration().TransformToWorld(x);
+			hVec3D d  = cx - co;
+			
+			hVec3D p2  = p;
+			hVec2D pa = si->second->GetCalibration().Project( p );
+			float n;
+			do
+			{
+				p2 += d;
+				hVec2D p2a = si->second->GetCalibration().Project( p2 );
+				n = (p2a-pa).norm();
+			}
+			while( n < 1.0f );
+			
+			ptest << (p2-p).norm() << endl;
+			
+			
+		}
+	}
+	
 	
 	
 	std::stringstream oss;
@@ -411,8 +451,8 @@ int main(int argc, char* argv[])
 				
 				cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), cv::Scalar(128,  0,   0), 2);
 				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), cv::Scalar(255,  0,   0), 2);
-				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
-				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
+// 				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
+// 				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
 				
 				
 				if( ti->first.find("Neck") != std::string::npos )
@@ -639,7 +679,15 @@ void ParseConfig( std::string configFile, SData &data )
 			}
 		}
 		
-		data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
+		if( cfg.exists("offsetFile") )
+		{
+			data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
+		}
+		else
+		{
+			data.offsetFile = "NO_OFFSET_FILE";
+		}
+		
 		
 	}
 	catch( libconfig::SettingException &e)
