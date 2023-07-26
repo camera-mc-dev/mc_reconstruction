@@ -1068,10 +1068,12 @@ int main(int argc, char* argv[])
 	// Which we were for BioCV.
 	//
 	// In that case there could be multiple best fits - so find them all.
+
 	//
 	// To find the best fits, we're going to slide the blink signal over the flash signal
 	// which is to say, the markers over the image signal.
 	//
+
 	// We "know" that the blink signal wont end _that_ long after the flash signal - typically
 	// just a few frames. So we prevent going too far beyond the end of the flash signal.
 	//
@@ -1106,6 +1108,7 @@ int main(int argc, char* argv[])
 		{
 			offErrs.push_back(9999);
 		}
+
 		cout << offset0 << "( " << (int)offset0 - blinkSignal.rows()/2 << " ) : "  << d.size() <<  " : " << offErrs.back() << endl;
 // 		cout << "\t\t:";
 // 		for( unsigned dc = 0; dc < d.size(); ++dc )
@@ -1158,6 +1161,7 @@ int main(int argc, char* argv[])
 			}
 			
 // 			cout << ec << " ( " << ec + blinkSignal.rows()/2 << " ) : " << medErr << " ? " << offErrs[ec] << " : " << (offErrs[ec] < medErr) << " <> " << cnt << " " << m / cnt << endl;
+
 		}
 		
 		cout << "got " << offMins.size() << " possible offsets: " << endl;
