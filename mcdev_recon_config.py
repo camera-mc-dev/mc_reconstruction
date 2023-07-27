@@ -11,12 +11,12 @@ def FindC3D(env):
 		print( "Could not find ezc3d, check paths in mcdev_recon_config.py, FindC3D()" )
 
 def FindOpensim(env):
-	env.Append(CPPDEFINES=["USE_OPENSIM"]);
-	env.Append(CPPPATH=["/home/muzz/programming/notmine/opensim/opensim_install/include/",
-	                    "/home/muzz/programming/notmine/opensim/opensim_install/include/OpenSim/",
-	                    "/home/muzz/programming/notmine/opensim/opensim_install/include/simbody/" ])
-	env.Append(LIBPATH=["/home/muzz/programming/notmine/opensim/opensim_install/lib/"])
-	env.Append(LIBS=["osimAnalyses", "osimActuators", "osimSimulation", "osimTools", "osimCommon", "SimTKsimbody", "SimTKcommon"])
+    env.Append(CPPDEFINES=["USE_OPENSIM"]);
+    env.Append(CPPPATH=["/opt/opensim/opensim/include/",
+                        "/opt/opensim/opensim/include/OpenSim/",
+                        "/opt/opensim/opensim/include/simbody/" ])
+    env.Append(LIBPATH=["/opt/opensim/opensim/lib/"])
+    env.Append(LIBS=["osimAnalyses", "osimActuators", "osimSimulation", "osimTools", "osimCommon", "SimTKsimbody", "SimTKcommon"])
 
 def FindAssImp(env):
 	env.ParseConfig("pkg-config assimp --cflags --libs");
