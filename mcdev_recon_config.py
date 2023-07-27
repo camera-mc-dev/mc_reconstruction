@@ -12,11 +12,12 @@ def FindC3D(env):
 
 def FindOpensim(env):
     env.Append(CPPDEFINES=["USE_OPENSIM"]);
-    env.Append(CPPPATH=["/opt/opensim/opensim/include/",
-                        "/opt/opensim/opensim/include/OpenSim/",
-                        "/opt/opensim/opensim/include/simbody/" ])
-    env.Append(LIBPATH=["/opt/opensim/opensim/lib/"])
-    env.Append(LIBS=["osimAnalyses", "osimActuators", "osimSimulation", "osimTools", "osimCommon", "SimTKsimbody", "SimTKcommon"])
+    env.Append(CPPPATH=["/opt/opensim/install/sdk/include/",
+                        "/opt/opensim/install/sdk/include/OpenSim/",
+                        "/opt/opensim/install/sdk/Simbody/include/simbody" ])
+    env.Append(LIBPATH=["/opt/opensim/install/sdk/lib/",
+                        "/opt/opensim/install/sdk/Simbody/lib/"])
+    env.Append(LIBS=["fmt", "osimAnalyses", "osimActuators", "osimSimulation", "osimTools", "osimCommon", "SimTKsimbody", "SimTKcommon"])
 
 def FindAssImp(env):
 	env.ParseConfig("pkg-config assimp --cflags --libs");
