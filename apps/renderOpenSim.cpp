@@ -494,7 +494,7 @@ OpenSimConverter::OpenSimConverter( std::string modelFile, std::string motionFil
 			//ss << geometryDir << "/" << mdi->second[mc].meshFile;
 			//mdi->second[mc].mesh = LoadVTPFile(ss.str());
 			
-			ss << geometryDir << "/" << mdi->second[mc].meshFile << ".ply";
+			ss << geometryDir << "/" << mdi->second[mc].meshFile << ".obj";
 			Assimp::Importer assimp;
 			const aiScene *scene = assimp.ReadFile( ss.str(), aiProcess_Triangulate );
 			
@@ -656,7 +656,7 @@ void OpenSimConverter::DumpPose(std::string poseFile)
 
 void OpenSimConverter::SetPose( unsigned frameNo )
 {
-	if( (int)frameNo + (int)syncOffset < 0 )
+	if( (( int)frameNo + (int)syncOffset < 0) || ((int)frameNo + (int)syncOffset >= motData.rows()) )
 		return;
 	
 	auto stateVarNames = model.getStateVariableNames();
