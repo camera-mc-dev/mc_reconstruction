@@ -495,6 +495,7 @@ OpenSimConverter::OpenSimConverter( std::string modelFile, std::string motionFil
 			//mdi->second[mc].mesh = LoadVTPFile(ss.str());
 			
 			ss << geometryDir << "/" << mdi->second[mc].meshFile << ".obj";
+			cout << ss.str() << endl;
 			Assimp::Importer assimp;
 			const aiScene *scene = assimp.ReadFile( ss.str(), aiProcess_Triangulate );
 			

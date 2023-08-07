@@ -207,7 +207,7 @@ void PeakDetect( genMatrix inData, genMatrix &out, bool offToOn )
 					peakLoc = floor(peakLoc);
 					plog << peakLoc << endl;
 					
-					out( rc, peakLoc ) = 1.0f;
+					out( rc, (int)peakLoc ) = 1.0f;
 					
 				}
 				else
@@ -999,12 +999,12 @@ int main(int argc, char* argv[])
 			
 			if( v0 > mn && v1 < mn )
 			{
-				blinkSignal(cc/sc) =  1.0f;
+				blinkSignal((int)(cc/sc)) =  1.0f;
 				cout << " on: " << cc << " ( " << cc/sc << " ) " << endl;
 			}
 			if( v0 < mn && v1 > mn )
 			{
-				blinkSignal(cc/sc) = -1.0f;
+				blinkSignal((int)(cc/sc)) = -1.0f;
 				cout << " off: " << cc << " ( " << cc/sc << " ) " << endl;
 			}
 		}
