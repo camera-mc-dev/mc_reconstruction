@@ -370,24 +370,22 @@ float TrackDistance( OccupancyTracker::STrack &a, OccupancyTracker::STrack &b, f
 	return  sd + log( std::max(1.0f,td) );
 }
 
-void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > &tracks )
+
+
+void MergeTracks( int idxa, OccupancyTracker::STrack &tracka, OccupancyTracker::STrack &trackb )
 {
-	int a = p.first;
-	int b = p.second;
 	
-	cout << "merging: " << a << " <- " << b << endl;
-	cout << tracks[a].startFrame << " " << tracks[a].endFrame << " : " << tracks[b].startFrame << " " << tracks[b].endFrame << endl;
 	
 	//
 	// The first thing we need to know are the frames over which the tracks exist,
 	// this is the union of the frames, not the intersection - we want to know all the frames.
 	//
 	std::set<int> frames;
-	for( auto fi = tracks[a].framePeaks.begin(); fi != tracks[a].framePeaks.end(); ++fi )
+	for( auto fi = tracka.framePeaks.begin(); fi != tracka.framePeaks.end(); ++fi )
 	{
 		frames.insert( fi->first );
 	}
-	for( auto fi = tracks[b].framePeaks.begin(); fi != tracks[b].framePeaks.end(); ++fi )
+	for( auto fi = trackb.framePeaks.begin(); fi != trackb.framePeaks.end(); ++fi )
 	{
 		frames.insert( fi->first );
 	}
@@ -399,10 +397,10 @@ void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > 
 	//
 	for( auto fi = frames.begin(); fi != frames.end(); ++fi )
 	{
-		auto fi0 = tracks[a].framePeaks.find( *fi );
-		auto fi1 = tracks[b].framePeaks.find( *fi );
+		auto fi0 = tracka.framePeaks.find( *fi );
+		auto fi1 = trackb.framePeaks.find( *fi );
 		
-		if( fi0 != tracks[a].framePeaks.end() && fi1 != tracks[b].framePeaks.end() )
+		if( fi0 != tracka.framePeaks.end() && fi1 != trackb.framePeaks.end() )
 		{
 			// both tracks have this frame.
 			// get a new mean and covariance.
@@ -416,12 +414,12 @@ void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > 
 			fi0->second.cov  = newCov;
 			
 		}
-		else if( fi0 == tracks[a].framePeaks.end() && fi1 != tracks[b].framePeaks.end() )
+		else if( fi0 == tracka.framePeaks.end() && fi1 != trackb.framePeaks.end() )
 		{
 			// only b has this frame
-			tracks[a].framePeaks[ *fi ] = tracks[b].framePeaks[ *fi ];
+			tracka.framePeaks[ *fi ] = trackb.framePeaks[ *fi ];
 		}
-		else if( fi0 != tracks[a].framePeaks.end() && fi1 != tracks[b].framePeaks.end() )
+		else if( fi0 != tracka.framePeaks.end() && fi1 != trackb.framePeaks.end() )
 		{
 			// only a has this frame.
 			// do nothing.
@@ -431,13 +429,13 @@ void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > 
 	//
 	// say that b got merged into a.
 	//
-	tracks[ p.second ].merged = p.first;
+	trackb.merged = idxa;
 	
 	//
 	// update the start and end frame of a
 	//
-	tracks[ p.first ].startFrame = std::min( tracks[ p.first ].startFrame, tracks[p.second].startFrame );
-	tracks[ p.first ].endFrame   = std::max(   tracks[ p.first ].endFrame,   tracks[p.second].endFrame );
+	tracka.startFrame = std::min( tracka.startFrame, trackb.startFrame );
+	tracka.endFrame   = std::max(   tracka.endFrame,   trackb.endFrame );
 	
 	//
 	// Fill gaps in the track.
@@ -448,9 +446,9 @@ void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > 
 	//
 	//
 	std::vector< std::pair<int,int> > gaps;
-	auto fi = tracks[ p.first ].framePeaks.begin();
+	auto fi = tracka.framePeaks.begin();
 	int i = fi->first;
-	while( fi != tracks[ p.first ].framePeaks.end() )
+	while( fi != tracka.framePeaks.end() )
 	{
 		// my memory says that the keys in a map will be sorted so this should work...
 		if( fi->first - i > 1 )
@@ -472,8 +470,8 @@ void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > 
 		
 		cout << "\t" << a << " -> " << b << endl;
 		
-		OccupancyTracker::SPeak &pa = tracks[ p.first ].framePeaks[ a ];
-		OccupancyTracker::SPeak &pb = tracks[ p.first ].framePeaks[ b ];
+		OccupancyTracker::SPeak &pa = tracka.framePeaks[ a ];
+		OccupancyTracker::SPeak &pb = tracka.framePeaks[ b ];
 		hVec2D d = pb.mean - pa.mean;
 		Eigen::Matrix2f covd = pb.cov - pa.cov;
 		
@@ -498,10 +496,116 @@ void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > 
 			cout << "\t\t" << pc.mean.transpose() << endl;
 			cout << pc.cov.transpose() << endl;
 			
-			tracks[ p.first ].framePeaks[ c ] = pc;
+			tracka.framePeaks[ c ] = pc;
 		}
 	}
 	
+	
+}
+
+void MergeTracks( std::pair<int,int> p, std::vector< OccupancyTracker::STrack > &tracks )
+{
+	int a = p.first;
+	int b = p.second;
+	
+	cout << "merging: " << a << " <- " << b << endl;
+	cout << tracks[a].startFrame << " " << tracks[a].endFrame << " : " << tracks[b].startFrame << " " << tracks[b].endFrame << endl;
+	
+	MergeTracks( a, tracks[a], tracks[b] );
+}
+
+void OccupancyTracker::SimpleAssociate( std::vector< OccupancyTracker::STrack > &tracks, int frame )
+{
+	// subset of tracks that exist in most recent previous frame
+	std::vector<int> atracks;
+	for( unsigned tc = 0; tc < tracks.size(); ++tc )
+	{
+		if( tracks[tc].endFrame == frame - 1 )
+			atracks.push_back(tc);
+	}
+// 	cout << "----" << endl;
+	// create "track" for peaks in current frame.
+	std::vector< STrack > ntracks;
+	auto fi0 = frameDetections.find( frame );
+	for( unsigned pc = 0; pc < fi0->second.size(); ++pc )
+	{
+		STrack t;
+		t.framePeaks[ fi0->first ] = fi0->second[pc];
+		t.startFrame = fi0->first;
+		t.endFrame   = fi0->first;
+		t.merged     = -1;
+		
+		ntracks.push_back(t);
+		
+// 		cout << pc << " " << t.framePeaks[fi0->first].mean.transpose() << endl;
+	}
+	
+	float sd,td;
+	if( tracks.size() == 0 )
+	{
+		tracks = ntracks;
+	}
+	else
+	{
+		genMatrix D( atracks.size(), ntracks.size() );
+		
+		for( unsigned atc = 0; atc < atracks.size(); ++atc )
+		{
+			unsigned tc = atracks[ atc ];
+			for( unsigned ntc = 0; ntc < ntracks.size(); ++ntc )
+			{
+				D( atc, ntc ) = TrackDistance( tracks[tc], ntracks[ntc], sd, td );
+			}
+		}
+		
+		std::vector< int > assocs( ntracks.size(), -1 );
+		float bestDist;
+		do
+		{
+			int atc, ntc;
+			bestDist = D.minCoeff( &atc, &ntc );
+			
+			// is this an unambiguous association?
+			// i.e. what is the second best track association for this detection?
+			//      what is the second best detection association for this track?
+			float nextBestTrack = 9999999.99f, nextBestDet = 999999.99f;
+			for( unsigned atc2 = 0; atc2 < atracks.size(); ++atc2 )
+			{
+				if( atc2 != atc && D(atc2,ntc) < nextBestTrack )
+					nextBestTrack = D( atc2, ntc );
+			}
+			for( unsigned ntc2 = 0; ntc2 < ntracks.size(); ++ntc2 )
+			{
+				if( ntc2 != ntc && D(atc,ntc2) < nextBestDet )
+					nextBestDet = D( atc, ntc2 );
+			}
+			
+			if( bestDist < settings.strictDistanceThreshold && bestDist < 0.25 * nextBestDet && bestDist < 0.25 * nextBestTrack )
+			{
+				assocs[ ntc ] = atc;
+			}
+			
+			// no unambiguous association for this det
+			for( unsigned atc2 = 0; atc2 < atracks.size(); ++atc2 )
+				D( atc2, ntc ) = 9999999.99f;
+			for( unsigned ntc2 = 0; ntc2 < ntracks.size(); ++ntc2 )
+				D( atc, ntc2 ) = 9999999.99f;
+		}
+		while( bestDist < settings.strictDistanceThreshold );
+		
+		for( unsigned ntc = 0; ntc < assocs.size(); ++ntc )
+		{
+			if( assocs[ntc] >= 0 )
+			{
+				int tc = atracks[ assocs[ntc] ];
+				MergeTracks( tc, tracks[tc], ntracks[ntc] );
+			}
+			else
+			{
+				tracks.push_back( ntracks[ntc] );
+			}
+		}
+	}
 	
 }
 
@@ -540,54 +644,24 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 #endif
 {
 	//
-	// Tracking is inevitably a frame-to-frame type thing, but frame-to-frame associations 
-	// is somewhat low-performing. Our task is to look at all the data that we have and 
-	// try to get the best possible solution with as few noise responses as possible and 
-	// I don't care how many times we pass over the data.
+	// Given all the detections over all the frames, we could just turn each detection into a 1-frame tracklet,
+	// and then do some kind of clustering to merge those tracklets together. 
 	//
-	// What I forsee is basically a clustering problem.
-	// Start with the extreme case - every individual detection in every frame 
-	// is its own tracklette
-	//
-	// Compute the distances between those "tracklettes" where distance is a function
-	// of space and time, taking into account the Gaussian we fit to the location.
-	//
-	// Iteratively merge together tracklettes. Obviously, we'll end up with a 
-	// hierarchical clustering through time which could lead to one single track if
-	// we don't know when to stop. So the trick is knowing when to stop,
-	// or at least, at what level to cut the hierarchy. 
-	//
-	// And I know, I know. It feels like I'm at that usual point - oh, this looks like 
-	// a nail, I'll use a hammer - but in the end, is that not just the way computer science 
-	// works?
-	// 
-	// Have I not always said: Everything in computer science comes down to searching?
-	//
-	
-	
-	
-	//
-	// We'll be horribly naive to begin with, but I can already see trouble with this.
+	// Trouble with that is that it quickly becomes absurd - but can be made a lot easier because from 
+	// frame to frame there are a lot of unambiguous temporal associations.
 	//
 	
 	//
-	// First off, all detections are set as a track that lasts a single frame.
+	// First off, turn the detections on the first frame into 1-frame tracks.
 	//
+	cout << "Simple associate: " << endl;
 	std::vector< STrack > ptracks;
+	auto fi0 = frameDetections.begin();
 	for( auto fi0 = frameDetections.begin(); fi0 != frameDetections.end(); ++fi0 )
 	{
-		for( unsigned pc = 0; pc < fi0->second.size(); ++pc )
-		{
-			STrack t;
-			t.framePeaks[ fi0->first ] = fi0->second[pc];
-			t.startFrame = fi0->first;
-			t.endFrame   = fi0->first;
-			t.merged     = -1;
-			
-			ptracks.push_back(t);
-		}
+		SimpleAssociate( ptracks, fi0->first );
+		cout << "frame " << fi0->first << " : " << "total tracks: " << ptracks.size() << endl;
 	}
-	
 	
 	
 	//
@@ -612,35 +686,40 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	//
 	//
 	std::map< std::pair<int,int>, float > distances;
+	std::vector< std::vector<std::pair<int,int> > > track2distanceTable;
 	std::pair<int,int> closestPair(0,1);
 #ifdef OCCTRACK_DEBUG
 	std::ofstream tmpfi("dists");
 #endif
 	float sd,td;
+	
+	track2distanceTable.resize( ptracks.size() );
+	
 	for( unsigned tc0 = 0; tc0 < ptracks.size(); ++tc0 )
 	{
-		for( unsigned tc1 = tc0+1; tc1 < ptracks.size(); ++tc1 )
+		for( unsigned tc1 = tc0+1; tc1 < tc0 + settings.numNearPeaks && tc1 < ptracks.size(); ++tc1 )
 		{
-			auto p = std::pair<int,int>(tc0,tc1);
-			float d = TrackDistance( ptracks[tc0], ptracks[tc1], sd, td );
-			
 			// we'll limit the number of other tracks that we can link to,
 			// we could do this by limiting the difference in time, but here
 			// I'm just going to limit the difference between t0 and t1, knowing
 			// that tc1 and tc0 are in time order anyway. This'll only fail if we 
 			// have too many detections in one frame and fail to span time.
-			if( tc1 - tc0 < settings.numNearPeaks )
+			
+			auto p = std::pair<int,int>(tc0,tc1);
+			float d = TrackDistance( ptracks[tc0], ptracks[tc1], sd, td );
+			
+			distances[p] = d;
+			if( distances[p] < distances[ closestPair ] )
 			{
-				distances[p] = d;
-				if( distances[p] < distances[ closestPair ] )
-				{
-					closestPair = p;
-				}
-				
-#ifdef OCCTRACK_DEBUG
-				tmpfi << tc0 << " " << tc1 << " : " << distances[p] << " : " << sd << " " << td << endl;
-#endif
+				closestPair = p;
 			}
+			track2distanceTable[ tc0 ].push_back( p );
+			track2distanceTable[ tc1 ].push_back( p );
+			
+#ifdef OCCTRACK_DEBUG
+			tmpfi << tc0 << " " << tc1 << " : " << distances[p] << " : " << sd << " " << td << endl;
+#endif
+			
 		}
 	}
 #ifdef OCCTRACK_DEBUG
@@ -670,108 +749,86 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 		
 		MergeTracks( merge, ptracks );
 		
+		
+		
 		//
 		// Update the distances and find out what the new closest pair is.
 		//
+		// TODO: We don't want to search through all the distances looking for the ones that need updating.
+		//       instead, we should have a table saying which distances are relevant for each track. 
+		//
+		
+		
+		// so, the second track in the merge pair no longer exists, but it could have a
+		// distance to another track that the first track didn't have.
+		std::set< std::pair<int,int> > toUpdate;
+// 		cout << " A : ";
+		for( unsigned pc = 0; pc < track2distanceTable[ merge.first ].size(); ++pc )
+		{
+			toUpdate.insert( track2distanceTable[ merge.first ][pc] );
+// 			cout << "( " << track2distanceTable[ merge.first ][pc].first << " " << track2distanceTable[ merge.first ][pc].second << " ) ";
+		}
+// 		cout << endl;
+// 		cout << "B : "; 
+		for( unsigned pc = 0; pc < track2distanceTable[ merge.second ].size(); ++pc )
+		{
+			auto p = track2distanceTable[ merge.second ][pc];
+			
+// 			cout << "( " << p.first << " " << p.second << " ) ";
+			
+			std::pair<int,int> np;
+			if( p.first == merge.second )
+			{
+				np.first  = std::min( p.second, merge.first );
+				np.second = std::max( p.second, merge.first );
+			}
+			else if( p.second = merge.second )
+			{
+				np.first  = std::min( p.first, merge.first );
+				np.second = std::max( p.first, merge.first );
+			}
+			
+// 			cout << " | " << p.first << " " << " | " << p.second << endl;
+			
+			toUpdate.insert( p );
+		}
+		track2distanceTable[ merge.first ].clear();
+		for( auto i = toUpdate.begin(); i != toUpdate.end(); ++i )
+			track2distanceTable[ merge.first ].push_back(*i);
+		
+		
+		// now we can update those few distances.
+		for( unsigned pc = 0; pc < track2distanceTable[ merge.first ].size(); ++pc )
+		{
+			auto p = track2distanceTable[ merge.first ][pc];
+			distances[ p ] = TrackDistance( ptracks[ p.first ], ptracks[ p.second ], sd, td );
+#ifdef OCCTRACK_DEBUG
+			mfi << "  new dist: " << p.first << ", " << p.second << " -> " << distances[ p ] << "(" << sd << ", " << td << ") " << endl;
+#endif
+		}
+		
+		distances[ merge ] = 999999.99;
+		
 #ifdef OCCTRACK_DEBUG
 		cout << "update" << endl;
 #endif
 		float closestDist = 999999.99;
-		std::map< std::pair<int,int>, float > newDistances;
-		for( auto pi = distances.begin(); pi != distances.end(); ++pi )
+		for( auto di = distances.begin(); di != distances.end(); ++di )
 		{
-			// for a track pair (a,b)
-			// we assert that 'b' is always merged into 'a'.
-			// find any distance pairs containing a or b and update them
-			// against the new 'a'
-			std::pair<int,int> p = pi->first;
-			if( p == merge )
+			if( di->second < closestDist )
 			{
-				// pair wont exist anymore, do nothing.
-			}
-			else if( p.first == merge.first)
-			{
-				// update distance.
-				newDistances[ p ] = TrackDistance( ptracks[ p.first ], ptracks[ p.second ], sd, td );
-#ifdef OCCTRACK_DEBUG
-				mfi << p.first << ", " << p.second << " -> " << newDistances[ p ] << "(" << sd << ", " << td << ") " << endl;
-#endif
-			}
-			else if( p.second == merge.first)
-			{
-				// update distance.
-				newDistances[ p ] = TrackDistance( ptracks[ p.first ], ptracks[ p.second ], sd ,td );
-#ifdef OCCTRACK_DEBUG
-				mfi << p.first << ", " << p.second << " -> " << newDistances[ p ] << "(" << sd << ", " << td << ") " << endl;
-#endif
-			}
-			else if( p.first == merge.second )
-			{
-				// so merge.second is no longer an active track.
-				// that means that any (merge.second, p.second) distance should become 
-				// a (merge.first, p.second) distance. 
-				// It's possible we'll come find that distance anyway, but we should make sure.
-				// but I'll stick to the rule that (a < b ) the pair (a,b).
-				int a = std::min( merge.first, p.second );
-				int b = std::max( merge.first, p.second );
-				std::pair<int,int> np( a, b );
-				newDistances[ np ] = TrackDistance( ptracks[ np.first ], ptracks[ np.second ], sd ,td );
-				
-#ifdef OCCTRACK_DEBUG
-				mfi << np.first << ", " << np.second << " -> " << np.first << ", " << np.second << " : " << newDistances[ np ] << "(" << sd << ", " << td << ") " << endl;
-#endif
-				
-				if( newDistances[ np ] < closestDist )
-				{
-					closestPair = np;
-					closestDist = newDistances[ np ];
-				}
-			}
-			else if( p.second == merge.second )
-			{
-				// again, merge.second is no longer an active track.
-				// that means that any (p.first, merge.second) distance should become 
-				// a (p.first, merge.first ).
-				// It's possible we'll come find that distance anyway, but we should make sure.
-				// but I'll stick to the rule that (a < b ) the pair (a,b).
-				int a = std::min( merge.first, p.first );
-				int b = std::max( merge.first, p.first );
-				std::pair<int,int> np( a, b );
-				newDistances[ np ] = TrackDistance( ptracks[ np.first ], ptracks[ np.second ], sd ,td );
-				
-#ifdef OCCTRACK_DEBUG
-				mfi << np.first << ", " << np.second << " -> " << np.first << ", " << np.second << " : " << newDistances[ np ] << "(" << sd << ", " << td << ") " << endl;
-#endif
-				
-				if( newDistances[ np ] < closestDist )
-				{
-					closestPair = np;
-					closestDist = newDistances[ np ];
-				}
-			}
-			else
-			{
-				newDistances[ p ] = pi->second;
-			}
-			
-			
-			
-			if( newDistances.find(p) != newDistances.end() && newDistances[ p ] < closestDist )
-			{
-				closestPair = p;
-				closestDist = newDistances[ p ];
+				closestDist = di->second;
+				closestPair = di->first;
 			}
 		}
 		
-		assert( newDistances.find( merge ) == newDistances.end() );
-		
 #ifdef OCCTRACK_DEBUG
-		mfi << "next merge: " << closestPair.first << " " << closestPair.second << " : " << distances[ closestPair ] << " " << newDistances[ closestPair ] << endl;
+		mfi << "next merge: " << closestPair.first << " " << closestPair.second << " : " << distances[ closestPair ] << endl;
 		mfi << "\t" << ptracks[ closestPair.first ].startFrame << " " << ptracks[ closestPair.first ].endFrame << endl;
 		mfi << "\t" << ptracks[ closestPair.second ].startFrame << " " << ptracks[ closestPair.second ].endFrame << endl;
 #endif
 		
-		distances = newDistances;
+		
 		
 #ifdef OCCTRACK_DEBUG
 		//
@@ -813,7 +870,7 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 			dbgRen->Step(paused, advance);
 		advance = false;
 #endif
-		
+		cout << closestDist << " >? " << settings.distanceThreshold << " " << (closestDist > settings.distanceThreshold) << endl;
 		done = closestDist > settings.distanceThreshold;
 	}
 

@@ -11,7 +11,7 @@ using std::endl;
 
 #include "calib/calibration.h"
 
-// #define OCCTRACK_DEBUG
+#define OCCTRACK_DEBUG
 #ifdef OCCTRACK_DEBUG
 #include "renderer2/basicRenderer.h"
 #endif
@@ -36,17 +36,18 @@ public:
 	
 	struct SOccTrackSettings
 	{
-		cv::Mat visMap;           // visibility map of the occupancy area.
-		int minVisibility;        // minimum visibility of a peak.
-		float detectionThreshold; // minimum occupancy.
-		
-		bool useVisibility;       // when computing occupancy is the computation count/cameras  or count/visibility?
+		cv::Mat visMap;                 // visibility map of the occupancy area.
+		int minVisibility;              // minimum visibility of a peak.
+		float detectionThreshold;       // minimum occupancy.
+		                                
+		bool useVisibility;             // when computing occupancy is the computation count/cameras  or count/visibility?
 		int numCameras;
 		
-		float distanceThreshold;  // this is based on the track distance, which is spatialDistance + log( timeDistance )
-		int   numNearPeaks;       // When we create the initial tracks, we compute the distance vs. the numNearPeaks 
-		                          // that come after it in space and time. A small number might mean you don't connect 
-		                          // the track fully. A large number will mean a lot of redundant calculation.
+		float distanceThreshold;        // this is based on the track distance, which is spatialDistance + log( timeDistance )
+		float strictDistanceThreshold;  // as above, but stricter for initial tracklets.
+		int   numNearPeaks;             // When we create the initial tracks, we compute the distance vs. the numNearPeaks 
+		                                // that come after it in space and time. A small number might mean you don't connect 
+		                                // the track fully. A large number will mean a lot of redundant calculation.
 	};
 	
 	struct SPeak
@@ -90,6 +91,8 @@ protected:
 	
 	SOccTrackSettings settings;
 	
+	
+	void SimpleAssociate( std::vector< STrack > &tracks, int frame );
 	
 	//
 	// I don't want to store all the unprocessed occupancy maps, that would just be a bit too painful.

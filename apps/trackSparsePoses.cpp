@@ -156,8 +156,10 @@ void ParseConfig( std::string cfgFile, SData &data )
 		data.trackSettings.useVisibility = cfg.lookup("useVisibility");
 		data.trackSettings.detectionThreshold = cfg.lookup("detectionThreshold");
 		
-		data.trackSettings.distanceThreshold = 12.0f;
-		data.trackSettings.numNearPeaks      = 50;
+		data.trackSettings.strictDistanceThreshold = 8.0f;
+		data.trackSettings.distanceThreshold = cfg.lookup("distanceThreshold");
+		data.trackSettings.strictDistanceThreshold = cfg.lookup("strictDistanceThreshold");
+		data.trackSettings.numNearPeaks      = cfg.lookup("numNearPeaks");
 		
 		
 		data.firstFrame = 0;
@@ -200,16 +202,19 @@ void LoadPoses( SData &data )
 {
 	data.pcPoses.resize( data.poseSources.size() );
 	
+	#pragma omp parallel for
 	for( unsigned sc = 0; sc < data.poseSources.size(); ++sc )
 	{
 		// type of skeleton affects how we load data :(
 		switch( data.poseDataType )
 		{
 			case POSE_JSON_DIR:
+				cout << "reading poses from directory of .json files: " << data.poseSources[sc] << endl;
 				ReadPoseDirJSON( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 			
 			case POSE_DLC_CSV:
+				cout << "reading poses from deep lab cut .csv file: " << data.poseSources[sc] << endl;
 				ReadDLC_CSV( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 		}
@@ -357,7 +362,12 @@ int main( int argc, char* argv[] )
 	// Get our tracks...
 	//
 	std::vector< OccupancyTracker::STrack > tracks;
+#ifdef OCCTRACK_DEBUG
+	cv::Mat debug( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
+	OT.GetTracks(tracks, ren, debug );
+#else
 	OT.GetTracks(tracks);
+#endif
 	cout << "tracks: " << tracks.size() << endl;
 	
 	
