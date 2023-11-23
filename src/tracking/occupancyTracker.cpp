@@ -172,6 +172,97 @@ float SpatialDist( OccupancyTracker::SPeak &a, OccupancyTracker::SPeak &b )
 	return (a.mean-b.mean).norm();
 }
 
+void TrackDistanceSFM( OccupancyTracker::STrack &singleFrameTrack, OccupancyTracker::STrack &multiFrameTrack, float &sd, float &td )
+{
+	
+	//
+	// The simple thing is to find the closest point in time between b and a
+	//
+	
+	// singleFrameTrack happens before multiFrameTrack starts
+	if( singleFrameTrack.startFrame <= multiFrameTrack.startFrame )
+	{
+		sd = SpatialDist( multiFrameTrack.framePeaks[ multiFrameTrack.startFrame ], singleFrameTrack.framePeaks[ singleFrameTrack.startFrame ] );
+		td = abs( multiFrameTrack.startFrame - singleFrameTrack.startFrame );
+	}
+	
+	// singleFrameTrack happens after multiFrameTrack ends
+	else if( singleFrameTrack.startFrame >= multiFrameTrack.endFrame )
+	{
+		sd = SpatialDist( multiFrameTrack.framePeaks[ multiFrameTrack.endFrame ], singleFrameTrack.framePeaks[ singleFrameTrack.startFrame ] );
+		td = abs( multiFrameTrack.endFrame - singleFrameTrack.startFrame );
+	}
+	
+	// singleFrameTrack happens during multiFrameTrack
+	else
+	{
+		// we'll just quickly search for the nearest moment.
+		int bestFrame = multiFrameTrack.startFrame;
+		float bestTD  = abs( multiFrameTrack.startFrame - singleFrameTrack.startFrame );
+		for( auto afi = multiFrameTrack.framePeaks.begin(); afi != multiFrameTrack.framePeaks.end(); ++afi )
+		{
+			float tmpTD = abs( afi->first - singleFrameTrack.startFrame );
+			if( tmpTD < bestTD )
+			{
+				bestFrame = afi->first;
+				bestTD = tmpTD;
+			}
+		}
+		
+		sd = SpatialDist( multiFrameTrack.framePeaks[ bestFrame ], singleFrameTrack.framePeaks[ singleFrameTrack.startFrame ] );
+		td = bestTD;
+	}
+	
+}
+
+void TrackDistanceCorrelateDuringOverlap( OccupancyTracker::STrack &a, OccupancyTracker::STrack &b, float &sd, float &td )
+{
+	//
+	// Tracking literature is just far too large for my liking - so there are an infinite number of 
+	// things I'm ignoring as I naively plow on with my own tracking approach. That's just... the way 
+	// it has to be. 
+	//
+	
+	
+	// One option is the mean distance between the tracks during the period of their overlap, we should probably
+	// be factoring in the covariance of each peak and indeed the variance of the difference...
+	float meanD = 0.0f;
+	int cnt = 0;
+	unsigned sf = std::max( a.startFrame, b.startFrame );
+	unsigned ef = std::min( a.endFrame, b.endFrame );
+	for( unsigned fc = sf; fc <= ef; ++fc )
+	{
+		auto pa = a.framePeaks.find( fc );
+		auto pb = b.framePeaks.find( fc );
+		if( pa != a.framePeaks.end() && pb != b.framePeaks.end() )
+		{
+			meanD += ( pa->second.mean - pb->second.mean ).norm();
+			++cnt;
+		}
+	}
+	meanD /= cnt;
+	
+	float var = 0.0f;
+	for( unsigned fc = sf; fc <= ef; ++fc )
+	{
+		auto pa = a.framePeaks.find( fc );
+		auto pb = b.framePeaks.find( fc );
+		if( pa != a.framePeaks.end() && pb != b.framePeaks.end() )
+		{
+			float d = ( pa->second.mean - pb->second.mean ).norm();
+			var += (d-meanD)*(d-meanD);
+		}
+	}
+	var /= cnt;
+	float std = sqrt(var);
+	
+	
+	// experiment:
+	sd = meanD + var;
+	td = 0;
+	
+}
+
 float TrackDistance( OccupancyTracker::STrack &a, OccupancyTracker::STrack &b, float &sd, float &td )
 {
 	if( a.merged >= 0 || b.merged >= 0 )
@@ -182,7 +273,7 @@ float TrackDistance( OccupancyTracker::STrack &a, OccupancyTracker::STrack &b, f
 	// This is a complicated thing to consider, because we have lots of scenarios.
 	//
 	//   - Consider if we're looking at single frames, track vs. single frame, track vs. track
-	//   - do the two tracks overlap in time
+	//   - do the two tracks overlap in time?
 	// 
 	sd = td = 999999.99f;
 	
@@ -202,145 +293,29 @@ float TrackDistance( OccupancyTracker::STrack &a, OccupancyTracker::STrack &b, f
 	//
 	// a is multiple frames, b is a single frame.
 	//
-	// b is either before, during, or after a.
-	// Find the spatial distance at the most appropriate time.
-	//
 	else if( a.endFrame - a.startFrame > 0 && b.endFrame - b.startFrame == 0)
 	{
-		
-		if( b.startFrame <= a.startFrame )
-		{
-			sd = SpatialDist( a.framePeaks[ a.startFrame ], b.framePeaks[ b.startFrame ] );
-			td = abs( a.startFrame - b.startFrame );
-		}
-		else if( b.startFrame >= a.endFrame )
-		{
-			sd = SpatialDist( a.framePeaks[ a.endFrame ], b.framePeaks[ b.startFrame ] );
-			td = abs( a.endFrame - b.startFrame );
-		}
-		else
-		{
-			// TODO: I don't really want to be searching for the nearest time.
-			//       can a track have a gap in time - or does the merge interpolate that gap?
-			//       right now, there's a gap :(
-			int bestFrame = a.startFrame;
-			float bestTD  = abs( a.startFrame - b.startFrame );
-			for( auto afi = a.framePeaks.begin(); afi != a.framePeaks.end(); ++afi )
-			{
-				float tmpTD = abs( afi->first - b.startFrame );
-				if( tmpTD < bestTD )
-				{
-					bestFrame = afi->first;
-					bestTD = tmpTD;
-				}
-			}
-			
-			sd = SpatialDist( a.framePeaks[ bestFrame ], b.framePeaks[ b.startFrame ] );
-			td = bestTD;
-		}
+		TrackDistanceSFM( b, a, sd, td );
 	}
-	
 	
 	//
 	// a is single frame, b is multiple frames
 	//
-	// a is either before, during, or after b.
-	// Find the spatial distance at the most appropriate time.
-	// NOTE: Code duplication of above: make a function!
-	//
 	else if( a.endFrame - a.startFrame == 0 && b.endFrame - b.startFrame > 0)
 	{
-		if( a.startFrame <= b.startFrame )
-		{
-			sd = SpatialDist( b.framePeaks[ b.startFrame ], a.framePeaks[ a.startFrame ] );
-			td = abs( b.startFrame - a.startFrame );
-		}
-		else if( a.startFrame >= b.endFrame )
-		{
-			sd = SpatialDist( b.framePeaks[ b.endFrame ], a.framePeaks[ a.startFrame ] );
-			td = abs( b.endFrame - a.startFrame );
-		}
-		else
-		{
-			// TODO: I don't really want to be searching for the nearest time.
-			//       can a track have a gap in time - or does the merge interpolate that gap?
-			//       right now, there's a gap :(
-			int bestFrame = b.startFrame;
-			float bestTD  = abs( b.startFrame - a.startFrame );
-			for( auto bfi = b.framePeaks.begin(); bfi != b.framePeaks.end(); ++bfi )
-			{
-				float tmpTD = abs( bfi->first - a.startFrame );
-				if( tmpTD < bestTD )
-				{
-					bestFrame = bfi->first;
-					bestTD = tmpTD;
-				}
-			}
-			
-			sd = SpatialDist( b.framePeaks[ bestFrame ], a.framePeaks[ a.startFrame ] );
-			td = bestTD;
-		}
+		TrackDistanceSFM( a, b, sd, td );
 	}
 	
 	
 	//
 	// Both tracks cover multiple frames.
 	//
-	// We'll set the distance between them as the mean distance 
-	// during the overlap, if there is one. Otherwise the difference
-	// and nearest time point.
-	//
-	// TODO: We could also consider the direction of the track?
-	//
 	else if( a.endFrame - a.startFrame > 0 && b.endFrame - b.startFrame > 0)
 	{
 		// if they overlap in time, take the mean distance over that overlap
 		if( a.startFrame <= b.endFrame && a.endFrame >= b.startFrame )
 		{
-			// TODO: Again we have the problem of there maybe being a gap in the track.
-			//       but it gets worse here because there's the horrible chance,
-			//       however small, of there not being any actual shared frames. Oups.
-			int cnt = 0;
-			float mean = 0.0f;
-			int closest = 99999;
-			for( int f = std::max( a.startFrame, b.startFrame ); f <= std::min(a.endFrame, b.endFrame); ++f )
-			{
-				auto afi = a.framePeaks.find( f );
-				auto bfi = b.framePeaks.find( f );
-				if( afi != a.framePeaks.end() && bfi != b.framePeaks.end() )
-				{
-					cnt++;
-					mean += SpatialDist( afi->second, bfi->second );
-				}
-				
-			}
-			
-			if( cnt == 0 )
-			{
-				// awkwardly, they overlap in time, but don't have detections on the
-				// same frame...
-				//
-				// so we can linearly interpolate each tracklet to fill the gaps...
-				// then compute the distances again.
-				// So that's our big TODO.
-				// well we've fused elsewhere...
-				
-				
-				cout << "cnt == 0" << endl;
-				cout << a.startFrame << " " << a.endFrame << " : ";
-				for( auto afi = a.framePeaks.begin(); afi != a.framePeaks.end(); ++afi )
-					cout << afi->first << " " ;
-				cout << endl;
-				
-				cout << b.startFrame << " " << b.endFrame << " : ";
-				for( auto bfi = b.framePeaks.begin(); bfi != b.framePeaks.end(); ++bfi )
-					cout << bfi->first << " " ;
-				cout << endl;
-				
-				exit(0);
-			}
-			sd = mean / cnt;
-			td = 0;
+			TrackDistanceCorrelateDuringOverlap( a, b, sd, td );
 		}
 		
 		// if they don't overlap in time, take the distance at closest time
@@ -362,12 +337,13 @@ float TrackDistance( OccupancyTracker::STrack &a, OccupancyTracker::STrack &b, f
 	}
 	
 	//
-	// How does being 1 frame apart compare to being 1 cell apart?
-	// It seems like we want time distance to be less important than space difference,
-	// but I imagine that, after some point, you'd want it to be much larger. 
-	// Kind of an awkward tradeoff.
+	// What is a distance that meaningfully handles spatial difference and time difference?
+	// Being a long way apart in time should make merging quickly impossible, but being 
+	// within a few frames, shouldn't be a major penalty.
 	//
-	return  sd + log( std::max(1.0f,td) );
+	
+	//return  sd + exp(td-4);
+	return sd * (1+exp(td-4));
 }
 
 
@@ -726,7 +702,109 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	tmpfi.close();
 #endif
 	
+	
+	
+	
+	
+	
 	bool paused, advance;
+	paused = advance = false;
+	int fc0 = 0;
+	int fc1 = 6000;
+	int maxTimeGap = 50;
+	for( unsigned fc = fc0; fc < fc1; ++fc )
+	{
+		std::vector<int> activeTracks;
+		for( unsigned tc = 0; tc < ptracks.size(); ++tc )
+		{
+			if( fc >= ptracks[tc].startFrame-maxTimeGap && fc <= ptracks[tc].endFrame+maxTimeGap )
+				activeTracks.push_back( tc );
+		}
+		
+		genMatrix D( activeTracks.size(), activeTracks.size() );
+		for( unsigned atc0 = 0; atc0 < D.rows(); ++atc0 )
+		{
+			for( unsigned atc1 = 0; atc1 < D.cols(); ++atc1 )
+			{
+				if( atc1 <= atc0 )
+					D(atc0, atc1) = 99999999.99f;
+				else
+					D(atc0, atc1) = TrackDistance( ptracks[ activeTracks[atc0] ], ptracks[activeTracks[atc1] ], sd, td );
+			}
+		}
+		
+		cout << D.rows() << endl;
+		
+		//
+		//
+		//
+		
+		
+		
+#ifdef OCCTRACK_DEBUG
+		dbgImg = cv::Mat( dbgImg.rows, dbgImg.cols, CV_32FC3, cv::Scalar(0,0,0) );
+		for( unsigned atc = 0; atc < activeTracks.size(); ++atc )
+		{
+			int tc = activeTracks[atc];
+			// draw a line through all peaks in this track - but what colour?
+			float b,g,r;
+			if( fc < ptracks[tc].startFrame )
+			{
+				g = 0;
+				r = 0;
+				b = std::max( 0.25, 1.0 - (ptracks[tc].startFrame-fc)/100.0f );
+			}
+			else if( fc >= ptracks[tc].startFrame && fc <= ptracks[tc].endFrame )
+			{
+				g = 1.0f;
+				b = 0.0f;
+				r = 0.0f;
+			}
+			else if( fc > ptracks[tc].endFrame )
+			{
+				g = 0.0f;
+				b = 0.0f;
+				r = std::max( 0.25, 1.0 - (fc-ptracks[tc].endFrame)/100.0f );
+			}
+			
+			auto fi0 = ptracks[tc].framePeaks.begin();
+			auto fi1 = ptracks[tc].framePeaks.begin();
+			auto fi  = ptracks[tc].framePeaks.find( fc );
+			fi1++;
+			
+			if( fi != ptracks[tc].framePeaks.end() )
+			{
+				cv::Point p0( fi->second.mean(0), fi->second.mean(1) );
+				cv::circle( dbgImg, p0, 2, cv::Scalar(0,1,0) );
+			}
+			
+			while( fi1 != ptracks[tc].framePeaks.end() )
+			{
+				cv::Point p0( fi0->second.mean(0), fi0->second.mean(1) );
+				cv::Point p1( fi1->second.mean(0), fi1->second.mean(1) );
+				
+				cv::line( dbgImg, p0, p1, cv::Scalar(b,g,r), 2 );
+				++fi0;
+				++fi1;
+			}
+		}
+		
+		
+		dbgRen->SetBGImage( dbgImg );
+		dbgRen->Step(paused, advance);
+		while( paused && !advance )
+			dbgRen->Step(paused, advance);
+		advance = false;
+#endif
+	}
+	
+	
+
+	
+	
+	
+	
+	
 	paused = advance = false;
 	
 #ifdef OCCTRACK_DEBUG
@@ -735,12 +813,24 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	bool done = false;
 	while( !done )
 	{
+		
+		//
+		// You can tell I'm grasping at straws
+		//
+		
+		
+		
+		
+		
+		
 		std::pair<int,int> merge = closestPair;
 		
 #ifdef OCCTRACK_DEBUG
 		dbgImg = cv::Mat( dbgImg.rows, dbgImg.cols, CV_32FC3, cv::Scalar(0,0,0) );
 		cout << "tracks: " << ptracks.size() << endl;
-		cout << "merge: " << merge.first << " " << merge.second << " : " << distances[ merge ] << endl;
+		float sd,td;
+		float d = TrackDistance( ptracks[ merge.first ], ptracks[ merge.second ], sd, td );
+		cout << "merge: " << merge.first << " " << merge.second << " : " << distances[ merge ] << " ( " << d << " " << sd << " " << td  << " ) " << endl;
 		
 		mfi << "---------" << endl;
 		mfi << "merge: " << merge.first << " " << merge.second << " : " << distances[ merge ] << endl;
@@ -803,7 +893,7 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 			auto p = track2distanceTable[ merge.first ][pc];
 			distances[ p ] = TrackDistance( ptracks[ p.first ], ptracks[ p.second ], sd, td );
 #ifdef OCCTRACK_DEBUG
-			mfi << "  new dist: " << p.first << ", " << p.second << " -> " << distances[ p ] << "(" << sd << ", " << td << ") " << endl;
+			// mfi << "  new dist: " << p.first << ", " << p.second << " -> " << distances[ p ] << "(" << sd << ", " << td << ") " << endl;
 #endif
 		}
 		
