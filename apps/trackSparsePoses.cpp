@@ -381,8 +381,24 @@ int main( int argc, char* argv[] )
 			{
 				OccupancyTracker::SPeak &peak = fi00->second;
 				
-				// start by drawing the gaussian of this frame peak.
+				// start by drawing the draw the whole track as lines. 
 				cv::Mat visOcc = cv::Mat( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
+				
+				
+				auto fi0 = tracks[tc].framePeaks.begin();
+				auto fi1 = tracks[tc].framePeaks.begin();
+				fi1++;
+				while( fi1 != tracks[tc].framePeaks.end() )
+				{
+					cv::Point p0( fi0->second.mean(0), fi0->second.mean(1) );
+					cv::Point p1( fi1->second.mean(0), fi1->second.mean(1) );
+					
+					cv::line( visOcc, p0, p1, cv::Scalar(1,0,0), 2 );
+					++fi0;
+					++fi1;
+				}
+				
+				// then over the top of that, gaussian of this frame peak.
 				
 				#pragma omp parallel for
 				for( unsigned rc = 0; rc < visOcc.rows; ++rc )
@@ -403,19 +419,7 @@ int main( int argc, char* argv[] )
 				}
 				
 				
-				// then over the top of that, draw the whole track as lines.
-				auto fi0 = tracks[tc].framePeaks.begin();
-				auto fi1 = tracks[tc].framePeaks.begin();
-				fi1++;
-				while( fi1 != tracks[tc].framePeaks.end() )
-				{
-					cv::Point p0( fi0->second.mean(0), fi0->second.mean(1) );
-					cv::Point p1( fi1->second.mean(0), fi1->second.mean(1) );
-					
-					cv::line( visOcc, p0, p1, cv::Scalar(1,0,0), 2 );
-					++fi0;
-					++fi1;
-				}
+				
 				
 				ren->SetBGImage(visOcc);
 				ren->StepEventLoop();

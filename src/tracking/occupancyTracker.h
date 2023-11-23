@@ -11,7 +11,7 @@ using std::endl;
 
 #include "calib/calibration.h"
 
-#define OCCTRACK_DEBUG
+// #define OCCTRACK_DEBUG
 #ifdef OCCTRACK_DEBUG
 #include "renderer2/basicRenderer.h"
 #endif

@@ -1,6 +1,5 @@
 #include "occupancyTracker.h"
 
-#include "gnnTracker/tracker.h"
 
 
 #include <fstream>
@@ -198,13 +197,10 @@ void DrawEllipse( cv::Mat &img, OccupancyTracker::SPeak &peak, cv::Scalar( color
 
 
 
-void UpdateTracks( int fc, std::vector<OccupancyTracker::STrack> &tracks, std::vector< SPeak > &dets )
+void UpdateTracks( int fc, std::vector<OccupancyTracker::STrack> &tracks, std::vector< OccupancyTracker::SPeak > &dets )
 {
-	// I'm not going to do hard associations of detections to tracks.
-	// Instead, I'm going to go _mad_ and set each track to a weighted mean of 
-	// _all_ detections. The key, obviously, is setting the weights, and we set the
-	// weights based on the distance of the detection to the track's previous position.
-	
+	// start with a simple distance matrix...
+	genMatrix D( tracks.size(), dets.size() );
 	for( unsigned tc = 0; tc < tracks.size(); ++tc )
 	{
 		int tfc;
@@ -218,44 +214,74 @@ void UpdateTracks( int fc, std::vector<OccupancyTracker::STrack> &tracks, std::v
 		std::vector<float> dists( dets.size() );
 		for( unsigned dc = 0; dc < dets.size(); ++dc )
 		{
-			dists[dc] = (tracks[tc].framePeaks[tfc].mean - dets[dc].mean).norm();
+			D(tc,dc) = (tracks[tc].framePeaks[tfc].mean - dets[dc].mean).norm();
 		}
-		
+	}
+	
+	// allow each detection to affect only 1 track,
+	// but a track to be affected by n detections.
+	// that basically means go down the columns of D keeping only 
+	// the min of that column
+	for( unsigned dc = 0; dc < D.cols(); ++dc )
+	{
+		float min = 9999999999.99f;
+		for( unsigned tc = 0; tc < D.rows(); ++tc )
+		{
+			min = std::min( min, D(tc,dc) );
+		}
+		for( unsigned tc = 0; tc < D.rows(); ++tc )
+		{
+			if( D(tc,dc) > min )
+				D(tc,dc) = -1.0f;
+		}
+	}
+	
+	for( unsigned tc = 0; tc < D.rows(); ++tc )
+	{
 		// use a softmin to set the weights.
 		// softmin = softmax(-x)
-		std::vector<float> weights( dists.size() );
+		std::vector<float> weights( D.cols() );
 		float sum = 0.0f;
 		for( unsigned wc = 0; wc < weights.size(); ++wc )
 		{
-			weights[wc] = exp( -dists[wc] );
-			sum += weights[wc];
+			if( D(tc,wc) >= 0 )
+			{
+				weights[wc] = exp( -D(tc,wc) );
+				sum += weights[wc];
+			}
+			else
+				weights[wc] = 0.0f;
 		}
-		for( unsigned wc = 0; wc < weights.size(); ++wc )
-			weights[wc] /= sum;
 		
-		hVec2D mean; mean << 0,0,0;
-		Eigen::Matrix2f cov; cov << 0,0,   0,0;
-		float conf = 0;
-		float area = 0;
-		for( unsigned wc = 0; wc < weights.size(); ++wc )
+		if( sum > 0 ) // otherwise no associations.
 		{
-			mean += weights[wc] * dets[wc].mean;
-			cov  += weights[wc] * dets[wc].cov;  // I'm going to pretend that's true because it doesn't really matter
-			conf += weights[wc] * dets[wc].conf;
-			area += weights[wc] * dets[wc].area;
+			for( unsigned wc = 0; wc < weights.size(); ++wc )
+				weights[wc] /= sum;
+			
+			hVec2D mean; mean << 0,0,0;
+			Eigen::Matrix2f cov; cov << 0,0,   0,0;
+			float conf = 0;
+			float area = 0;
+			for( unsigned wc = 0; wc < weights.size(); ++wc )
+			{
+				mean += weights[wc] * dets[wc].mean;
+				cov  += weights[wc] * dets[wc].cov;  // I'm going to pretend that's true because it doesn't really matter
+				conf += weights[wc] * dets[wc].confidence;
+				area += weights[wc] * dets[wc].area;
+			}
+			mean /= mean(2);
+			cov  /= mean(2);
+			conf /= mean(2);
+			area /= mean(2);
+			
+			tracks[tc].framePeaks[fc].mean       = mean;
+			tracks[tc].framePeaks[fc].cov        = cov;
+			tracks[tc].framePeaks[fc].confidence = conf;
+			tracks[tc].framePeaks[fc].area       = area;
+			
+			tracks[tc].startFrame = std::min( tracks[tc].startFrame, fc );
+			tracks[tc].endFrame = std::max( tracks[tc].endFrame, fc );
 		}
-		mean /= mean(2);
-		cov  /= mean(2);
-		conf /= mean(2);
-		area /= mean(2);
-		
-		tracks[tc].framePeaks[fc].mean       = mean;
-		tracks[tc].framePeaks[fc].cov        = cov;
-		tracks[tc].framePeaks[fc].confidence = conf;
-		tracks[tc].framePeaks[fc].area       = area;
-		
-		tracks[tc].startFrame = std::min( tracks[tc].startFrame, fc );
-		tracks[tc].endFrame = std::max( tracks[tc].endFrame, fc );
 	}
 }
 
@@ -291,7 +317,7 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	// our first tuning parameter.
 	//
 	std::sort( numDets.begin(), numDets.end() );
-	float numTracksGuild = 0.6;
+	float numTracksGuide = 0.6;
 	int numTracks = numDets[ numTracksGuide * numDets.size()-1 ];
 	
 	cout << "Guessing that there's " << numTracks << " things worth trying to track. " << endl;
@@ -351,6 +377,8 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	if( fi == frameDetections.end() )
 		throw std::runtime_error("Couldn't find init frame?" );
 	
+	cout << "initialising tracking at frame with longest run of " << numTracks << " detections: " << initFrame << endl;
+	
 	int fc = fi->first;
 	auto &dets = fi->second;
 	assert( dets.size() == numTracks );
@@ -367,27 +395,30 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	//
 	// Then we track forwards to the end...
 	//
+	cout << "tracking forwards..." << endl;
 	for( int fc = initFrame+1; fc <= lastFrame; ++fc )
 	{
 		fi = frameDetections.find( fc );
 		if( fi != frameDetections.end() )
-			UpdateTracks( fc, tracks, dets );
+			UpdateTracks( fc, tracks, fi->second );
 	}
 	
 	
 	//
 	// And backwards to the start.
 	//
+	cout << "tracking backwards..." << endl;
 	for( int fc = initFrame-1; fc >= 0; --fc )
 	{
 		fi = frameDetections.find( fc );
 		if( fi != frameDetections.end() )
-			UpdateTracks( fc, tracks, dets );
+			UpdateTracks( fc, tracks, fi->second );
 	}
 	
 	
 	
 #ifdef OCCTRACK_DEBUG
+	cout << "debug render of tracking" << endl;
 	bool paused, advance;
 	paused = advance = false;
 	for( auto fdi = frameDetections.begin(); fdi != frameDetections.end(); ++fdi )
@@ -396,25 +427,27 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 		
 		for( unsigned dc = 0; dc < fdi->second.size(); ++dc )
 		{
-			hVec2D p = fdi->second[dc].mean();
+			hVec2D p = fdi->second[dc].mean;
 			cv::circle( dbgImg, cv::Point( p(0), p(1) ), 4, cv::Scalar(0,0,0.5) );
 		}
 		
 		for( unsigned tc = 0; tc < tracks.size(); ++tc )
 		{
 			auto fi = tracks[tc].framePeaks.find( fdi->first );
-			hVec2D p = fi->second.mean();
+			hVec2D p = fi->second.mean;
 			cv::circle( dbgImg, cv::Point( p(0), p(1) ), 4, cv::Scalar(0,1.0,0) );
 		}
 		
 		
-		
+		dbgRen->SetBGImage( dbgImg );
 		dbgRen->Step( paused, advance );
 		while( paused && !advance )
 			dbgRen->Step( paused, advance );
+		advance = false;
 	}
 		
 #endif
+	cout << "---- done tracking ----" << endl;
 }
 
 
