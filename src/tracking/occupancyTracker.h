@@ -43,11 +43,7 @@ public:
 		bool useVisibility;             // when computing occupancy is the computation count/cameras  or count/visibility?
 		int numCameras;
 		
-		float distanceThreshold;        // this is based on the track distance, which is spatialDistance + log( timeDistance )
-		float strictDistanceThreshold;  // as above, but stricter for initial tracklets.
-		int   numNearPeaks;             // When we create the initial tracks, we compute the distance vs. the numNearPeaks 
-		                                // that come after it in space and time. A small number might mean you don't connect 
-		                                // the track fully. A large number will mean a lot of redundant calculation.
+		float numTracksGuide;
 	};
 	
 	struct SPeak

@@ -317,8 +317,8 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	// our first tuning parameter.
 	//
 	std::sort( numDets.begin(), numDets.end() );
-	float numTracksGuide = 0.6;
-	int numTracks = numDets[ numTracksGuide * numDets.size()-1 ];
+	
+	int numTracks = numDets[ settings.numTracksGuide * numDets.size()-1 ];
 	
 	cout << "Guessing that there's " << numTracks << " things worth trying to track. " << endl;
 	
