@@ -386,13 +386,13 @@ int main( int argc, char* argv[] )
 			{
 				for( unsigned pc = 0; pc < i->second.size(); ++pc )
 				{
-					boxes[sc].push_back( i->second[pc].representativeBB );
+					bboxes[sc].push_back( i->second[pc].representativeBB );
 				}
 			}
 		}
 		
 		
-		OM.OccupancyFromBBoxes( boxes, occ );
+		OM.OccupancyFromBBoxes( bboxes, occ );
 #endif
 		cv::Mat visOcc;
 		visOcc = OT.AddFrame( fc, occ[0] );
