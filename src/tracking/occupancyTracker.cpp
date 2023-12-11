@@ -318,6 +318,10 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	//
 	std::sort( numDets.begin(), numDets.end() );
 	
+	if( numDets.size() == 0 )
+	{
+		throw std::runtime_error("No detections? Something is wrong with the input" );
+	}
 	int numTracks = numDets[ settings.numTracksGuide * numDets.size()-1 ];
 	
 	cout << "Guessing that there's " << numTracks << " things worth trying to track. " << endl;

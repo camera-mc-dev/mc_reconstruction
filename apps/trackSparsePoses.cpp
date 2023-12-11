@@ -298,7 +298,7 @@ int main( int argc, char* argv[] )
 		}
 	}
 	
-	cout << minFrame << " -> " << maxFrame << endl;
+	cout << "Running detection on frames " << minFrame << " -> " << maxFrame << endl;
 	
 	int mapRows = OM.GetMapRows();
 	int mapCols = OM.GetMapCols();
@@ -332,9 +332,9 @@ int main( int argc, char* argv[] )
 	std::string occRenDir;
 	if( data.renderHeadless )
 	{
-		std::stringstream ss; ss << data.renderTarget << "/occupancy/"
+		std::stringstream ss; ss << data.renderTarget << "/occupancy/";
 		occRenDir = ss.str();
-		boost::filesystem::path p( data.renderTarget );
+		boost::filesystem::path p( occRenDir );
 		if( boost::filesystem::exists(p) && !boost::filesystem::is_directory(p))
 		{
 			throw( std::runtime_error("occupancy render target exists but is not a directory") );
@@ -389,10 +389,10 @@ int main( int argc, char* argv[] )
 			else
 			{
 				bool advance = false;
-				renWrapper->ren->Step(camChange, paused, advance);
+				renWrapper->ren->Step(paused, advance);
 				while( paused && !advance )
 				{
-					done = !renWrapper->ren->Step(paused, advance);
+					renWrapper->ren->Step(paused, advance);
 				}
 			}
 		}
@@ -415,6 +415,7 @@ int main( int argc, char* argv[] )
 	
 	if( data.visualise )
 	{
+		cout << "Rendering tracks: " << endl;
 		paused = false;
 		for( unsigned tc = 0; tc < tracks.size(); ++tc )
 		{
@@ -438,31 +439,34 @@ int main( int argc, char* argv[] )
 			
 			cout << tc << endl;
 			auto fi00 = tracks[tc].framePeaks.begin();
-			while( fi00 != tracks[tc].framePeaks.end() )
+			for(unsigned fc = minFrame; fc < maxFrame; ++fc )
 			{
-				OccupancyTracker::SPeak &peak = fi00->second;
-				
-				// start by drawing the gaussian of this frame peak.
 				cv::Mat visOcc = cv::Mat( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
-				
-				#pragma omp parallel for
-				for( unsigned rc = 0; rc < visOcc.rows; ++rc )
+					
+				auto fi00 = tracks[tc].framePeaks.find( fc );
+				if( fi00 != tracks[tc].framePeaks.end() )
 				{
-					for( unsigned cc = 0; cc < visOcc.cols; ++cc )
+					OccupancyTracker::SPeak &peak = fi00->second;
+					
+					// start by drawing the gaussian of this frame peak.
+										#pragma omp parallel for
+					for( unsigned rc = 0; rc < visOcc.rows; ++rc )
 					{
-						cv::Vec3f &p = visOcc.at< cv::Vec3f >(rc,cc);
-						float &v = p[2];
-						
-						// given a 2D Gaussian with mean and cov what is the value at (cc,rc)?
-						hVec2D d; d << cc,rc,1.0f;
-						d = d - peak.mean;
-						float top = exp( -0.5 * d.head(2).transpose() * peak.cov.inverse() * d.head(2) );
-						//float bot = sqrt( (2*3.1415*peak.cov).norm() ); // don't care about this for vis.
-						
-						p[1] = std::max( p[1], top * peak.confidence ) ;
+						for( unsigned cc = 0; cc < visOcc.cols; ++cc )
+						{
+							cv::Vec3f &p = visOcc.at< cv::Vec3f >(rc,cc);
+							float &v = p[2];
+							
+							// given a 2D Gaussian with mean and cov what is the value at (cc,rc)?
+							hVec2D d; d << cc,rc,1.0f;
+							d = d - peak.mean;
+							float top = exp( -0.5 * d.head(2).transpose() * peak.cov.inverse() * d.head(2) );
+							//float bot = sqrt( (2*3.1415*peak.cov).norm() ); // don't care about this for vis.
+							
+							p[1] = std::max( p[1], top * peak.confidence ) ;
+						}
 					}
 				}
-				
 				
 				// then over the top of that, draw the whole track as lines.
 				auto fi0 = tracks[tc].framePeaks.begin();
@@ -491,10 +495,10 @@ int main( int argc, char* argv[] )
 				else
 				{
 					bool advance = false;
-					renWrapper->ren->Step(camChange, paused, advance);
+					renWrapper->ren->Step(paused, advance);
 					while( paused && !advance )
 					{
-						done = !renWrapper->ren->Step(paused, advance);
+						renWrapper->ren->Step(paused, advance);
 					}
 				}
 				
