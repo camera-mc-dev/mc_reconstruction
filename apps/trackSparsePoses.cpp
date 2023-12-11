@@ -351,10 +351,13 @@ int main( int argc, char* argv[] )
 	for( unsigned fc = minFrame; fc < maxFrame; ++fc )
 	{
 		cout << fc << endl;
+		
+		
 		//
 		// First version of this will use the representative point 
 		// of each detection.
 		//
+#ifdef OCC_FROM_POINTS
 		std::vector< std::vector< hVec2D > > points(data.pcPoses.size());
 		for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
 		{
@@ -370,7 +373,27 @@ int main( int argc, char* argv[] )
 		
 		
 		OM.OccupancyFromPoints( points, occ );
+#else
+		//
+		// Occupancy from bboxes makes more sense proably, though arms flailing out wide 
+		// coule be a complication...
+		//
+		std::vector< std::vector< cv::Rect > > bboxes( data.pcPoses.size() );
+		for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
+		{
+			auto i = data.pcPoses[sc].find(fc);
+			if( i != data.pcPoses[sc].end() )
+			{
+				for( unsigned pc = 0; pc < i->second.size(); ++pc )
+				{
+					boxes[sc].push_back( i->second[pc].representativeBB );
+				}
+			}
+		}
 		
+		
+		OM.OccupancyFromBBoxes( boxes, occ );
+#endif
 		cv::Mat visOcc;
 		visOcc = OT.AddFrame( fc, occ[0] );
 		
