@@ -23,4 +23,4 @@ This process is performed by the `trackSparsePoses` tool. The tool basically doe
 
 The representative point for a detection is basically the confidence weighted mean of the detection keypoints.
 
-Full details of the approach should be obvious in the code, so all that really remains is to give an example of a configuration file.
+Full details of the approach should be obvious in the code, so all that really remains is to give an example of a configuration file. As the config file is shared with the `fuseSparsePoses` tool, we'll present it after the next section.

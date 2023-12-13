@@ -47,7 +47,7 @@ struct SData
 	poseSource_t poseDataType;
 	
 	int firstFrame;
-	
+	bool occupancyFromPoints;
 	bool visualise;
 	bool renderHeadless;
 	std::string renderTarget;
@@ -167,6 +167,8 @@ void ParseConfig( std::string cfgFile, SData &data )
 		{
 			data.firstFrame = cfg.lookup("firstFrame");
 		}
+		
+		data.occupancyFromPoints = cfg.lookup("occupancyFromPoints");
 		
 		data.visualise = false;
 		data.renderHeadless = false;
@@ -357,43 +359,46 @@ int main( int argc, char* argv[] )
 		// First version of this will use the representative point 
 		// of each detection.
 		//
-#ifdef OCC_FROM_POINTS
-		std::vector< std::vector< hVec2D > > points(data.pcPoses.size());
-		for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
+		if( data.occupancyFromPoints )
 		{
-			auto i = data.pcPoses[sc].find(fc);
-			if( i != data.pcPoses[sc].end() )
+			std::vector< std::vector< hVec2D > > points(data.pcPoses.size());
+			for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
 			{
-				for( unsigned pc = 0; pc < i->second.size(); ++pc )
+				auto i = data.pcPoses[sc].find(fc);
+				if( i != data.pcPoses[sc].end() )
 				{
-					points[sc].push_back( i->second[pc].representativePoint );
+					for( unsigned pc = 0; pc < i->second.size(); ++pc )
+					{
+						points[sc].push_back( i->second[pc].representativePoint );
+					}
 				}
 			}
+			
+			
+			OM.OccupancyFromPoints( points, occ );
 		}
-		
-		
-		OM.OccupancyFromPoints( points, occ );
-#else
-		//
-		// Occupancy from bboxes makes more sense proably, though arms flailing out wide 
-		// coule be a complication...
-		//
-		std::vector< std::vector< cv::Rect > > bboxes( data.pcPoses.size() );
-		for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
+		else
 		{
-			auto i = data.pcPoses[sc].find(fc);
-			if( i != data.pcPoses[sc].end() )
+			//
+			// Occupancy from bboxes makes more sense probably, though arms flailing out wide 
+			// could be a complication...
+			//
+			std::vector< std::vector< cv::Rect > > bboxes( data.pcPoses.size() );
+			for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
 			{
-				for( unsigned pc = 0; pc < i->second.size(); ++pc )
+				auto i = data.pcPoses[sc].find(fc);
+				if( i != data.pcPoses[sc].end() )
 				{
-					bboxes[sc].push_back( i->second[pc].representativeBB );
+					for( unsigned pc = 0; pc < i->second.size(); ++pc )
+					{
+						bboxes[sc].push_back( i->second[pc].representativeBB );
+					}
 				}
 			}
+			
+			
+			OM.OccupancyFromBBoxes( bboxes, occ );
 		}
-		
-		
-		OM.OccupancyFromBBoxes( bboxes, occ );
-#endif
 		cv::Mat visOcc;
 		visOcc = OT.AddFrame( fc, occ[0] );
 		
