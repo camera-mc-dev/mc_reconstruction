@@ -24,3 +24,6 @@ This process is performed by the `trackSparsePoses` tool. The tool basically doe
 Occupancy can be calculated in one of two ways. Each pose detection is a set of keypoints in the image. From that set of keypoints we can either compute a single representative point (a confidence weighted mean of the detected keypoints) or we can compute a bounding box around the keypoints. Occupancy for a frame can then be detected based on testing the representative point vs. the cell, or testing bounding box intersection against each cell.
 
 
+
+The config file for `trackSparsePoses` is shared with the `fuseSparsePoses` tool. An example is available in the `mc_reconstruction/configs` directory, and shown we'll after the next section.
+

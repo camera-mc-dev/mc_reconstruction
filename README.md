@@ -129,13 +129,13 @@ Now, run the occupancy map based `trackSparsePoses` to resolve cross-camera pers
 Get the 3D reconstruction of the poses using `fuseSparsePoses`, and render the output as needed (e.g. using `compareMocap` as here)
 
 <div style="text-align: center">
-![OpenPose on BioCV P28 data](imgs/recon-bcv28.mp4){style="width: 90%; margin: auto;"}
+![Fused OpenPose on BioCV P28 data](imgs/recon-bcv28.mp4){style="width: 90%; margin: auto;"}
 </div>
 
 Use the `mc_opensim` tools to process the fused poses with OpenSim, and if wanted, render the OpenSim model back over the images.
 
 <div style="text-align: center">
-![OpenPose on BioCV P28 data](imgs/osim-bcv28.mp4){style="width: 90%; margin: auto;"}
+![OpenSim render on BioCV P28 data](imgs/osim-bcv28.mp4){style="width: 90%; margin: auto;"}
 </div>
 
 ## Documentation
