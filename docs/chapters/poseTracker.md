@@ -14,13 +14,13 @@ To do this, we make use of our occupancy map and occupancy tracker classes.
 
 This process is performed by the `trackSparsePoses` tool. The tool basically does:
 
-  1) Load pose data from various sources
-  2) for each person in each frame, compute a representative point
-  3) compute occupancy for each frame using bounding box cell projections and testing the representative point against each bounding box.
-  4) Track through the occupancy maps
-  5) Associate tracks back to detections
+  1) Load pose data from various sources.
+  2) for each person in each frame, compute a representative point.
+  3) compute occupancy for each frame.
+  4) Track through the occupancy maps.
+  5) Associate tracks back to detections.
   6) Output associations for each person.
 
-The representative point for a detection is basically the confidence weighted mean of the detection keypoints.
+Occupancy can be calculated in one of two ways. Each pose detection is a set of keypoints in the image. From that set of keypoints we can either compute a single representative point (a confidence weighted mean of the detected keypoints) or we can compute a bounding box around the keypoints. Occupancy for a frame can then be detected based on testing the representative point vs. the cell, or testing bounding box intersection against each cell.
 
-Full details of the approach should be obvious in the code, so all that really remains is to give an example of a configuration file.
+
