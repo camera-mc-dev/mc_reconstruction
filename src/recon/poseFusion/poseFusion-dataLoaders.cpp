@@ -3,6 +3,10 @@
 
 #include "misc/tokeniser.h"
 
+// preferrable to opencv json loader.
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 int FNoFromJSONFilename( boost::filesystem::path pth )
 {
 	int num = -1;
@@ -83,25 +87,41 @@ void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > 
 bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 {
 	// load the correct json file.
-	cv::FileStorage cvfs(fn, cv::FileStorage::READ);
-	if( !cvfs.isOpened() )
+// 	cv::FileStorage cvfs(fn, cv::FileStorage::READ);
+// 	if( !cvfs.isOpened() )
+// 	{
+// 		cout << "Could not read file: " << fn << endl;
+// 		return false;
+// 	}
+	
+	std::ifstream f(fn);
+	if( !f )
 	{
-		cout << "Could not read file: " << fn << endl;
+		cout << "Could not open file: " << fn << endl;
 		return false;
 	}
+	json data = json::parse(f);
 	
 // 	cout << endl << endl;
 // 	cout << fn << endl;
 	
 	// parse the data to get the joints of individual "people"
 	poses.clear();
-	cv::FileNode people = cvfs["people"];
+	
+	//cv::FileNode people = cvfs["people"];
+	
+	
+	json people = data["people"];
+	cout << people.size() << endl;
 	
 	int personID = 0;
 	for( auto it = people.begin(); it != people.end(); ++it )
 	{
-		std::vector< float > vals;
-		(*it)["pose_keypoints_2d"] >> vals;
+// 		std::vector< float > vals;
+		// (*it)["pose_keypoints_2d"] >> vals;
+		
+		auto &p = *it;
+		auto &vals = p["pose_keypoints_2d"];
 		
 		PersonPose pp;
 		pp.personID = personID;
