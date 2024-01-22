@@ -303,12 +303,15 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	// Question 1) How many objects do we think we have in the scene?
 	//             My scenes tend to have a fairly constant number of people in them,
 	//             so...
-	std::vector<int> numDets( frameDetections.size() );
+	//             ah, another caveat is we ignore empty frames so that our median is
+	//             based only on frames for which there are detections.
+	std::vector<int> numDets; numDets.reserve( frameDetections.size() );
 	int c = 0;
 	for( auto fi = frameDetections.begin(); fi != frameDetections.end(); ++fi )
 	{
-		numDets[c] = fi->second.size();
-		++c;
+		int nd = fi->second.size();
+		if( nd > 0 )
+			numDets.push_back(nd);
 	}
 	
 	//
@@ -318,6 +321,10 @@ void OccupancyTracker::GetTracks( std::vector< OccupancyTracker::STrack > &track
 	//
 	std::sort( numDets.begin(), numDets.end() );
 	
+	if( numDets.size() == 0 )
+	{
+		throw std::runtime_error("No detections? Something is wrong with the input" );
+	}
 	int numTracks = numDets[ settings.numTracksGuide * numDets.size()-1 ];
 	
 	cout << "Guessing that there's " << numTracks << " things worth trying to track. " << endl;

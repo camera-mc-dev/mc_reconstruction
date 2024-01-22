@@ -25,6 +25,7 @@ The last decision that we have to make then is to determine just what it means t
 The most basic option for this is to simply project a point at the centre of the cell into the images. This is nice and simple, and if you are doing occupancy for a plane it can be enough. However, most of the time you really want to consider the whole column of space above (and maybe even beneath) the ground plane. More generally, we can consider the cell to be a rectangular volume between two planes.
 
 We can now project:
+
   1) the centre point
   2) a vertical line through the centre of the cell
   3) all 8 corner points of the cell.
@@ -38,8 +39,9 @@ Testing for the presence of an object in the image now depends rather strongly u
 As a basic rule, we state that any presence test will return 0 for the object not being present, and 1.0 for it being fully present, and we can return values inbetween for less confident expressions of presence.
 
 The traditional thing is to consider binary foreground masks, such as produced by background subtraction algorithms or other object segmentors.
+
   1) test 1 point: return present or not present based on whether the pixel is foreground or not.
-  2) test line: count how many pixels are foreground $n_f$ vs. the length of the line $n_p$. Return the ratio &n_f/n_l$
+  2) test line: count how many pixels are foreground $n_f$ vs. the length of the line $n_p$. Return the ratio $n_f/n_l$
   3) test bbox: count how many pixels in the bbox are foreground and return the ratio vs. the area $a$ of the bbox $n_f/a$
 
 ### Identifying when objects are present.
@@ -121,11 +123,18 @@ Computing an occupancy map for your data is then a case of calling one of the fo
 	                           std::vector< std::vector< hVec2D > > &points, 
 	                           std::vector< cv::Mat > &maps
 	                        );
+	                        
+	// create an occupancy map by projecting cells into an image and 
+	// checking the overlap of projection and the provided bboxes.
+	// projection type is assumed to be bbox. 
+	void OccupancyFromBBoxes( 
+	                           std::vector< std::vector< cv::Rect > > &bboxes, 
+	                           std::vector< cv::Mat > &maps
+	                        );	                        
 ```
 
-The first option `OccupancyFromSegmentation` is for when you use binary segmentation masks as input, and the second option for when you have a single point detection on an object.
+The first option `OccupancyFromSegmentation` is for when you use binary segmentation masks as input, and the second option for when you have a single point detection on an object, the last for when you have your detection as a 2D bounding box.
 
-Obvious extensions of the class would have a method to compute occupancy from a set of bounding box detections.
 
 One other method of note in the class is a simplistic tool for extracting peaks in the occupancy map:
 
