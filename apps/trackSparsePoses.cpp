@@ -440,102 +440,136 @@ int main( int argc, char* argv[] )
 #endif
 	cout << "tracks: " << tracks.size() << endl;
 	
+	std::vector< cv::Scalar > trackColours;
+	trackColours.push_back( cv::Scalar(0,1,0) );
+	trackColours.push_back( cv::Scalar(0,1,1) );
+// 	trackColours.push_back( cv::Scalar(1,0,0) );
+	trackColours.push_back( cv::Scalar(1,0,1) );
+	trackColours.push_back( cv::Scalar(1,1,0) );
+	trackColours.push_back( cv::Scalar(1,1,1) );
+	
+	trackColours.push_back( cv::Scalar(0  ,0.5,  0) );
+	trackColours.push_back( cv::Scalar(0  ,0.5,0.5) );
+// 	trackColours.push_back( cv::Scalar(0.5,  0,  0) );
+	trackColours.push_back( cv::Scalar(0.5,  0,0.5) );
+	trackColours.push_back( cv::Scalar(0.5,0.5,  0) );
+	trackColours.push_back( cv::Scalar(0.5,0.5,0.5) );
+	
 	
 	if( data.visualise )
 	{
 		cout << "Rendering tracks: " << endl;
 		paused = false;
+		
+		//
+		// Start by rendering the whole of each track to a single image.
+		// Make sure we have a decent resolution to see things at.
+		//
+		float mapRat = (float)mapRows / (float)mapCols;
+		int renRows = renWrapper->GetActive()->GetHeight();
+		int renCols = renWrapper->GetActive()->GetWidth();
+		float rscale = renRows / (float)mapRows;
+		float cscale = renCols / (float)mapCols;
+		cv::Mat tracksImg( renRows, renCols, CV_32FC3, cv::Scalar(0,0,0) );
+		
+		std::string trkRenDir;
+		if( data.renderHeadless )
+		{
+			std::stringstream ss;
+			ss << data.renderTarget << "/tracks/";
+			trkRenDir = ss.str();
+			boost::filesystem::path p( trkRenDir );
+			if( boost::filesystem::exists(p) && !boost::filesystem::is_directory(p))
+			{
+				throw( std::runtime_error("track render target exists but is not a directory") );
+			}
+			else if( !boost::filesystem::exists(p) )
+			{
+				boost::filesystem::create_directories(p);
+			}
+		}
+		
 		for( unsigned tc = 0; tc < tracks.size(); ++tc )
 		{
-			std::string trkRenDir;
-			if( data.renderHeadless )
+			// then over the top of that, draw the whole track as lines.
+			auto fi0 = tracks[tc].framePeaks.begin();
+			auto fi1 = tracks[tc].framePeaks.begin();
+			fi1++;
+			while( fi1 != tracks[tc].framePeaks.end() )
 			{
-				std::stringstream ss;
-				ss << data.renderTarget << "/trk" << std::setw(3) << std::setfill('0') << tc << "/";
-				trkRenDir = ss.str();
-				boost::filesystem::path p( trkRenDir );
-				if( boost::filesystem::exists(p) && !boost::filesystem::is_directory(p))
-				{
-					throw( std::runtime_error("track render target exists but is not a directory") );
-				}
-				else if( !boost::filesystem::exists(p) )
-				{
-					boost::filesystem::create_directories(p);
-				}
+				cv::Point p0( fi0->second.mean(0) * cscale, fi0->second.mean(1) * rscale );
+				cv::Point p1( fi1->second.mean(0) * cscale, fi1->second.mean(1) * rscale );
+				
+				cv::Scalar colour = trackColours[tc%trackColours.size()];
+				cv::line( tracksImg, p0, p1, colour, 1 );
+				++fi0;
+				++fi1;
 			}
+		}
+		
+		//
+		// Now go through the frames showing each track.
+		//
+		for(unsigned fc = minFrame; fc < maxFrame; ++fc )
+		{
+			cv::Mat renderTarget = tracksImg.clone();
 			
-			
-			cout << tc << endl;
-			auto fi00 = tracks[tc].framePeaks.begin();
-			for(unsigned fc = minFrame; fc < maxFrame; ++fc )
+			for( unsigned tc = 0; tc < tracks.size(); ++tc )
 			{
-				cv::Mat visOcc = cv::Mat( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
-					
+				cv::Scalar colour = trackColours[tc%trackColours.size()];
+				
 				auto fi00 = tracks[tc].framePeaks.find( fc );
 				if( fi00 != tracks[tc].framePeaks.end() )
 				{
 					OccupancyTracker::SPeak &peak = fi00->second;
 					
 					// start by drawing the gaussian of this frame peak.
-										#pragma omp parallel for
-					for( unsigned rc = 0; rc < visOcc.rows; ++rc )
+					#pragma omp parallel for
+					for( unsigned rc = 0; rc < renderTarget.rows; ++rc )
 					{
-						for( unsigned cc = 0; cc < visOcc.cols; ++cc )
+						for( unsigned cc = 0; cc < renderTarget.cols; ++cc )
 						{
-							cv::Vec3f &p = visOcc.at< cv::Vec3f >(rc,cc);
-							float &v = p[2];
+							cv::Vec3f &p = renderTarget.at< cv::Vec3f >(rc,cc);
 							
 							// given a 2D Gaussian with mean and cov what is the value at (cc,rc)?
-							hVec2D d; d << cc,rc,1.0f;
+							hVec2D d; d << cc/cscale,rc/rscale,1.0f;
 							d = d - peak.mean;
 							float top = exp( -0.5 * d.head(2).transpose() * peak.cov.inverse() * d.head(2) );
 							//float bot = sqrt( (2*3.1415*peak.cov).norm() ); // don't care about this for vis.
 							
-							p[1] = std::max( p[1], top * peak.confidence ) ;
+							//p[1] = std::max( p[1], top * peak.confidence ) ;
+							p[0] = std::max( p[0], top * (float)colour[0]);
+							p[1] = std::max( p[1], top * (float)colour[1]);
+							p[2] = std::max( p[2], top * (float)colour[2]);
 						}
 					}
-				}
-				
-				// then over the top of that, draw the whole track as lines.
-				auto fi0 = tracks[tc].framePeaks.begin();
-				auto fi1 = tracks[tc].framePeaks.begin();
-				fi1++;
-				while( fi1 != tracks[tc].framePeaks.end() )
-				{
-					cv::Point p0( fi0->second.mean(0), fi0->second.mean(1) );
-					cv::Point p1( fi1->second.mean(0), fi1->second.mean(1) );
 					
-					cv::line( visOcc, p0, p1, cv::Scalar(1,0,0), 2 );
-					++fi0;
-					++fi1;
+					cv::circle( renderTarget, cv::Point(peak.mean(0)*cscale, peak.mean(1)*rscale), 10, colour, 2);
 				}
-				
-				renWrapper->SetBGImage( visOcc );
+			}
 			
-				if( data.renderHeadless )
+			renWrapper->SetBGImage( renderTarget );
+			
+			if( data.renderHeadless )
+			{
+				renWrapper->StepEventLoop();
+				cv::Mat grab = renWrapper->Capture();
+				std::stringstream ss;
+				ss << trkRenDir << "/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
+				SaveImage( grab, ss.str() );
+			}
+			else
+			{
+				bool advance = false;
+				renWrapper->ren->Step(paused, advance);
+				while( paused && !advance )
 				{
-					renWrapper->StepEventLoop();
-					cv::Mat grab = renWrapper->Capture();
-					std::stringstream ss;
-					ss << trkRenDir << "/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
-					SaveImage( grab, ss.str() );
-				}
-				else
-				{
-					bool advance = false;
 					renWrapper->ren->Step(paused, advance);
-					while( paused && !advance )
-					{
-						renWrapper->ren->Step(paused, advance);
-					}
 				}
-				
-				
-				std::this_thread::sleep_for(std::chrono::milliseconds(1));
-				++fi00;
 			}
 			
 		}
+
 	}
 	
 	
