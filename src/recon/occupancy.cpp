@@ -312,6 +312,12 @@ void OccupancyMap::PrecomputeLineProjections()
 	{
 		lineVisibility[pc] = cv::Mat( mapRows, mapCols, CV_32FC1, cv::Scalar(0) );
 		
+		// each line projects to some set of pixels in the image. Looks like I tried to
+		// predict how many to avoid vector resizing too often. It was also a good hint 
+		// if a projection was shhit or not. ;p 
+		// 
+		// but we need to make a better prediction... or a better defence... against lines
+		// that span the whole image...
 		int bufSize = 0;
 		for( unsigned vc = 0; vc < settings.calibs.size(); ++vc )
 			bufSize = std::max( bufSize, (int)(settings.calibs[vc].height * 1.25) );
@@ -336,10 +342,18 @@ void OccupancyMap::PrecomputeLineProjections()
 				
 				for( unsigned vc = 0; vc < settings.calibs.size(); ++vc )
 				{
-					hVec2D plow, phigh;
-					plow = settings.calibs[vc].Project( low );
-					phigh = settings.calibs[vc].Project( high );
+					hVec3D low2, high2;
+					settings.calibs[vc].ClipToFrustum( low, high, low2, high2 );
+					if( low2(3) <= 0 || high2(3) <= 0) // line didn't clip frustum
+						continue;
+					//cout << settings.calibs[vc].Project( low ).transpose() << endl;
+					//cout << settings.calibs[vc].Project( high ).transpose() << endl;
 					
+					hVec2D plow, phigh;
+					plow = settings.calibs[vc].Project( low2 );
+					phigh = settings.calibs[vc].Project( high2 );
+					//cout << plow.transpose() << endl;
+					//cout << phigh.transpose() << endl;
 					
 					if( 
 						(
