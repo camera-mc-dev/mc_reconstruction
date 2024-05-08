@@ -320,7 +320,7 @@ void OccupancyMap::PrecomputeLineProjections()
 		// that span the whole image...
 		int bufSize = 0;
 		for( unsigned vc = 0; vc < settings.calibs.size(); ++vc )
-			bufSize = std::max( bufSize, (int)(settings.calibs[vc].height * 1.25) );
+			bufSize = std::max( bufSize, (int)( sqrt( pow(settings.calibs[vc].height,2) + pow(settings.calibs[vc].width,2) ) ) );
 		bufs[pc].resize( bufSize );
 		numPts[pc] = 0;
 	}
