@@ -112,7 +112,7 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 	
 	
 	json people = data["people"];
-	cout << people.size() << endl;
+// 	cout << people.size() << endl;
 	
 	int personID = 0;
 	for( auto it = people.begin(); it != people.end(); ++it )
