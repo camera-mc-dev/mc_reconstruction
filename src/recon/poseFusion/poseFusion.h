@@ -121,7 +121,7 @@ protected:
 };
 
 
-enum poseSource_t {POSE_JSON_DIR, POSE_DLC_CSV};
+enum poseSource_t {POSE_JSON_DIR, POSE_JSON_MMPOSE, POSE_DLC_CSV};
 enum leftRightDecision_t
 {
 	// for the first two sets of options, we know the person is facing parallel
@@ -148,6 +148,10 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses );
 // this one also handles OpenPose and AlphaPose but looks for all json file in a directory.
 //
 void ReadPoseDirJSON( std::string dir, std::map< int, std::vector< PersonPose > > &poses );
+
+// this one is for more recent mmpose which reads all frames from a single file.
+bool ReadPoseMMPoseJSON( std::string fn, std::map< int, std::vector< PersonPose > > &poses );
+
 
 // and this for DeelLabCut - it reads all the frames of a sequence.
 void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses );

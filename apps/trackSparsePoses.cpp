@@ -117,9 +117,19 @@ void ParseConfig( std::string cfgFile, SData &data )
 		{
 			data.poseDataType = POSE_JSON_DIR;
 		}
-		if( s.compare("dlccsv") == 0 )
+		else if( s.compare("jsonMMPose") == 0 )
+		{
+			data.poseDataType = POSE_JSON_MMPOSE;
+		}
+		else if( s.compare("dlccsv") == 0 )
 		{
 			data.poseDataType = POSE_DLC_CSV;
+		}
+		else
+		{
+			cout << "can only load pose data from jsonDir or jsonMMPose or dlccsv" << endl;
+			cout << "got: " << s << endl;
+			exit(0);
 		}
 		
 		
@@ -220,8 +230,13 @@ void LoadPoses( SData &data )
 		switch( data.poseDataType )
 		{
 			case POSE_JSON_DIR:
-				cout << "reading poses from directory of .json files: " << data.poseSources[sc] << endl;
+				cout << "reading poses from directory of .json files (openpose style): " << data.poseSources[sc] << endl;
 				ReadPoseDirJSON( data.poseSources[sc], data.pcPoses[sc] );
+				break;
+			
+			case POSE_JSON_MMPOSE:
+				cout << "reading poses from mmpose json file: " << data.poseSources[sc] << endl;
+				ReadPoseMMPoseJSON( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 			
 			case POSE_DLC_CSV:

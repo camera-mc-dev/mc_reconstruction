@@ -174,6 +174,76 @@ bool ReadPoseJSON( std::string fn, std::vector< PersonPose > &poses )
 }
 
 
+
+bool ReadPoseMMPoseJSON( std::string fn, std::map< int, std::vector< PersonPose > > &poses )
+{
+	cout << "reading: " << fn << endl;
+	std::ifstream f(fn);
+	if( !f )
+	{
+		cout << "Could not open file: " << fn << endl;
+		return false;
+	}
+	json data = json::parse(f);
+	
+	// parse the data to get the joints of individual "people"
+	poses.clear();
+	
+	for( unsigned ec = 0; ec < data.size(); ++ec )
+	{
+		int fno = data[ec]["frame_id"];
+		for( unsigned ic = 0; ic < data[ec]["instances"].size(); ++ic )
+		{
+			PersonPose pp;
+			pp.personID = ic;
+			
+			for( unsigned kpc = 0; kpc < data[ec]["instances"][ic]["keypoints"].size(); ++kpc )
+			{
+				hVec2D j;
+				j << data[ec]["instances"][ic]["keypoints"][kpc][0], data[ec]["instances"][ic]["keypoints"][kpc][1], 0.0f;
+				float s = data[ec]["instances"][ic]["keypoint_scores"][kpc];
+				if( s > 0 )
+					j(2) = 1.0f;	// leave h at 0 if not a valid point for easy ignoring..
+				pp.joints.push_back(j);
+				pp.confidences.push_back(s);
+				
+			}
+			
+			std::vector<float> xs, ys, cs;
+			for( unsigned jc = 0; jc < pp.joints.size(); ++jc )
+			{
+				if( pp.joints[jc].norm() > 0 ) // ignore any (0,0,0) points.
+				{
+					xs.push_back( pp.joints[jc](0) );
+					ys.push_back( pp.joints[jc](1) );
+					cs.push_back( pp.confidences[jc] );
+				}
+			}
+			
+			// and back to getting the representative point - the median gives us a robust
+			// option.
+			std::sort( xs.begin(), xs.end() );
+			std::sort( ys.begin(), ys.end() );
+			std::sort( cs.begin(), cs.end() );
+			
+			pp.representativePoint << xs[ xs.size()/2 ], ys[ ys.size()/2 ], 1.0f;
+			pp.representativeConfidence = cs[ cs.size()/2 ];
+			
+			pp.representativeBB = RobustBBox( xs, ys, pp.representativePoint );
+			
+			poses[ fno ].push_back( pp );
+		}
+		
+		cout << fno << " : " << poses[ fno ].size() << endl;
+	}
+	
+	return true;
+}
+
+
+
+
+
 void ReadDLC_CSV( std::string fn, std::map< int, std::vector< PersonPose > > &poses )
 {
 	poses.clear();

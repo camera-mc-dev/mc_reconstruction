@@ -36,9 +36,6 @@ scfpath = Dir('.').srcnode().abspath
 srcEnv.Append(LIBPATH = ["%s/../../mc_core/%s/src"%(scfpath, buildDir)])
 srcEnv.Prepend(LIBS = ["MC-core"])
 
-srcEnv.Append(LIBPATH = ["%s/../../mc_sds/%s/src"%(scfpath, buildDir)])
-srcEnv.Prepend(LIBS = ["MC-sds"])
-
 srcEnv.Append(CPPPATH = ["%s/../src"%(scfpath)] )
 srcEnv.Append(LIBPATH = ["%s/../%s/src"%(scfpath, buildDir)])
 srcEnv.Prepend(LIBS = ["MC-recon"])
