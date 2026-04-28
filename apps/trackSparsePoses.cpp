@@ -449,7 +449,7 @@ int main( int argc, char* argv[] )
 	std::vector< OccupancyTracker::STrack > tracks;
 #ifdef OCCTRACK_DEBUG
 	cv::Mat debug( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
-	OT.GetTracks(tracks, ren, debug );
+	OT.GetTracks(tracks, renWrapper->ren, debug );
 #else
 	OT.GetTracks(tracks);
 #endif
