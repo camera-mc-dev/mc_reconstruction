@@ -1,4 +1,5 @@
 #ifndef C3D_LOADER_H
+#define C3D_LOADER_H
 
 #ifdef USE_EZC3D
 
