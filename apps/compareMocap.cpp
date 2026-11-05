@@ -14,7 +14,6 @@
 #include "renderer2/renWrapper.h"
 
 #include "misc/c3d.h"
-#include "misc/trcLoader.h"
 #include "recon/poseFusion/poseFusion.h"
 
 #include <map>
@@ -44,7 +43,8 @@ struct SData
 
 	std::vector< std::string > trackFiles;
 	std::vector<unsigned> trackStartFrames;
-	std::map< std::string, genMatrix > tracks;
+	std::vector<C3DData> c3dData;
+	std::vector<FrameOffseter> frameOffseters;
 
 	// these must be in same order as trackFiles
 	std::vector< std::string > skeletonFiles;
@@ -56,6 +56,11 @@ struct SData
 	std::string headlessRenderOutput;
 	bool outputToVideo;
 
+	unsigned long sourceTimestamp;
+	double sourceFramerate;
+	bool haveSourceTimestamp, haveSourceFramerate;
+
+	std::vector< unsigned > frameOffsets;
 };
 
 bool GetLine( SData &data, int tfc, int mfc, std::string n0, std::string n1, cv::Point &p0, cv::Point &p1)
@@ -201,26 +206,12 @@ int main(int argc, char* argv[])
 	for( auto tfc = 0; tfc < data.trackFiles.size(); ++tfc )
 	{
 		cout << "loading: " << data.trackFiles[tfc] << endl;
-		std::map< std::string, genMatrix > newTracks;
 		if( data.trackFiles[tfc].find(".c3d") != std::string::npos )
 		{
 			cout << "loading (c3d): " << data.trackFiles[tfc] << endl;
-			LoadC3DFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
-		}
-		else if( data.trackFiles[tfc].find(".trc") > 0 != std::string::npos )
-		{
-			cout << "loading (trc): " << data.trackFiles[tfc] << endl;
-			LoadTRCFile( data.trackFiles[tfc], data.trackStartFrames[tfc], newTracks );
-		}
-		cout << "\tnew tracks: " << newTracks.size() << endl;
-		cout << "\tstart Frame: " << data.trackStartFrames[tfc] << endl;
-		for( auto ti = newTracks.begin(); ti != newTracks.end(); ++ti )
-		{
-			std::stringstream ss;
-			ss << std::setw(2) << std::setfill('0') << tfc << "-" << ti->first;
-			cout << ss.str() << endl;
-			data.tracks[ ss.str() ] = ti->second;
-
+			data.c3dData.push_back( C3DData( data.trackFiles[tfc] ) );
+			FrameOffseter offseter;
+			data.frameOffseters.push_back( offseter );
 		}
 	}
 
@@ -499,6 +490,40 @@ void ParseConfig( std::string configFile, SData &data )
 			ss << data.dataRoot << data.testRoot << s;
 			data.skeletonFiles.push_back( ss.str() );
 			data.skeletons.push_back( Skeleton( s ) );
+		}
+
+		if( cfg.exists("imgSourceTimestamp") )
+		{
+			data.sourceTimestamp = cfg.lookup("imgSourceTimestamp");
+			data.haveSourceTimestamp = true;
+		}
+		else
+		{
+			data.sourceTimestamp = 0;
+			data.haveSourceTimestamp = false;
+		}
+
+		if( cfg.exists("imgSourceFramerate") )
+		{
+			data.sourceFramerate = cfg.lookup("imgSourceFramerate");
+			data.haveSourceFramerate = true;
+		}
+		else
+		{
+			data.sourceFramerate = 0.0;
+			data.haveSourceFramerate = false;
+		}
+
+		if( cfg.exists("frameOffsets") )
+		{
+			libconfig::Setting &foffs = cfg.lookup("frameOffsets");
+			assert( foffs.getLength() == data.vidFiles.size() ||
+			        foffs.getLength() == data.imgDirs.size()     );
+
+			for( unsigned c = 0; c < foffs.getLength(); ++c )
+			{
+				data.frameOffsets.push_back( foffs[c] );
+			}
 		}
 
 	}
