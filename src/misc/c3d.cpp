@@ -59,6 +59,8 @@ C3DData::C3DData(std::string filePath)
 		                                        timecode.timecode[3] << "|" <<
 		                                        timecode.offset      << endl;
 	}
+	else
+		timecode.valid = false;
 	
 	
 	//
@@ -66,6 +68,7 @@ C3DData::C3DData(std::string filePath)
 	//
 	for( unsigned nc = 0; nc < names.size(); ++nc )
 	{
+		cout << names[nc] << numFrames << endl;
 		points[ names[nc] ] = genMatrix::Zero(6, numFrames );
 	}
 	

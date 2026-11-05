@@ -48,7 +48,7 @@ struct SData
 	std::map<std::string,unsigned> camKey2Indx;
 	
 	unsigned long sourceTimestamp;
-	unsigned sourceFramerate;
+	double sourceFramerate;
 	bool haveSourceTimestamp, haveSourceFramerate;
 	
 	
@@ -149,7 +149,7 @@ public:
 		ratio  = othRate / refFrameRate;
 	}
 	
-	FrameOffseter( unsigned long refTimestamp,  int refRate,  C3DData::STimeCode othTimeCode, float othRate, unsigned leapSeconds=37 )
+	FrameOffseter( unsigned long refTimestamp,  int refRate,  C3DData::STimeCode othTimeCode, double othRate, unsigned leapSeconds=37 )
 	{
 		//
 		// Now this gets... interesting. We _could_ be dealing with up to 3 different time formats:
@@ -178,6 +178,17 @@ public:
 		uint64_t tcSubframes = (tcSeconds * othTimeCode.codeRate + (othTimeCode.timecode[3]+1)) * othTimeCode.subFrames   + othTimeCode.offset;
 		
 		
+		
+		double tcOffset = tsSubframes - tcSubframes;
+		double tcRate   = othTimeCode.codeRate * othTimeCode.subFrames;
+		double tcRatio  = refRate / tcRate;
+		
+		
+		offset = tcRatio * tcOffset;
+		ratio  = othRate / refRate;
+		
+		// offset -= 2;
+		
 		cout << othTimeCode.timecode[0] << ":" 
 		     << othTimeCode.timecode[1] << ":"
 		     << othTimeCode.timecode[2] << ":"
@@ -188,33 +199,27 @@ public:
 		cout << tsSubframes << endl;
 		cout << tcSubframes << endl;
 		cout << tsSubframes - tcSubframes << endl;
-		
-		
-		double tcOffset = tsSubframes - tcSubframes;
-		double tcRate   = othTimeCode.codeRate * othTimeCode.subFrames;
-		double tcRatio  = refRate / tcRate;
-		
-		
-		offset = tcRatio * tcOffset;
-		ratio  = othRate / refRate;
-		
+		cout << tcRatio << endl;
+		cout << "---" << endl;
+		cout << offset << endl;
+		cout << ratio << endl;
 	}
 	
-	float ToReference( float frame )
+	double ToReference( double frame )
 	{
 		// given frame in our space, move to reference.
 		return frame/ratio - offset;
 	}
 	
-	float FromReference( float frame )
+	double FromReference( double frame )
 	{
 		return (frame + offset) * ratio;
 	}
 	
 private:
 	
-	float offset;
-	float ratio;
+	double offset;
+	double ratio;
 	
 };
 
@@ -297,7 +302,12 @@ int main(int argc, char* argv[])
 	std::vector<FrameOffseter> frameConverters;
 	for( unsigned c = 0; c < data.c3ds.size(); ++c )
 	{
-		if( !data.haveSourceTimestamp )
+		if( data.haveSourceTimestamp && data.c3ds[c].GetTimeCode().valid )
+		{
+			FrameOffseter o( data.sourceTimestamp, data.sourceFramerate,  data.c3ds[c].GetTimeCode(), data.c3ds[c].GetFramerate() );
+			frameConverters.push_back( o );
+		}
+		else
 		{
 			if( !data.haveSourceFramerate && data.frameOffsets.size() == data.c3ds.size() )
 			{
@@ -316,11 +326,7 @@ int main(int argc, char* argv[])
 				frameConverters.push_back( o );
 			}
 		}
-		else
-		{
-			FrameOffseter o( data.sourceTimestamp, data.sourceFramerate,  data.c3ds[c].GetTimeCode(), data.c3ds[c].GetFramerate() );
-			frameConverters.push_back( o );
-		}
+		
 	}
 	
 	//
@@ -485,11 +491,16 @@ int main(int argc, char* argv[])
 				{
 					hVec3D p;
 					float mfc = frameConverters[ c ].FromReference( curFrame );
+					cout << names[nc] << " ";
 					if( data.c3ds[c].GetPointAtFrame( names[nc], mfc, p ) )
 					{
 						hVec2D p2 = calib.Project( p );
 						cv::circle( img, cv::Point( p2(0), p2(1) ), std::max(5,img.rows/200), col, 4 );
+						
+						cout << p.transpose() << endl;
 					}
+					else
+						cout << " no " << endl;
 				}
 			}
 			
@@ -785,7 +796,7 @@ void ParseConfig( std::string configFile, SData &data )
 		}
 		else
 		{
-			data.sourceFramerate = 0;
+			data.sourceFramerate = 0.0;
 			data.haveSourceFramerate = false;
 		}
 		
