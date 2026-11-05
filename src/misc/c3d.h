@@ -78,21 +78,21 @@ private:
 	std::string filePath;
 };
 
-class FrameOffseter
+class FrameOffsetter
 {
 public:
-	FrameOffseter(  )
+	FrameOffsetter(  )
 	{
 		offset = 0;
 		ratio  = 1;
 	}
-	FrameOffseter( int refFrameRate,  int othRate, int othOffsetAtRef0 )
+	FrameOffsetter( int refFrameRate,  int othRate, int othOffsetAtRef0 )
 	{
 		offset = othOffsetAtRef0;
 		ratio  = othRate / refFrameRate;
 	}
 
-	FrameOffseter( unsigned long refTimestamp,  int refRate,  C3DData::STimeCode othTimeCode, double othRate, unsigned leapSeconds=37 )
+	FrameOffsetter( unsigned long refTimestamp,  int refRate,  C3DData::STimeCode othTimeCode, double othRate, unsigned leapSeconds=37 )
 	{
 		//
 		// Now this gets... interesting. We _could_ be dealing with up to 3 different time formats:

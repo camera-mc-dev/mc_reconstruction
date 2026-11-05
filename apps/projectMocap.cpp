@@ -201,30 +201,30 @@ int main(int argc, char* argv[])
 	//          2) assume tracks and video have same framerate and tracks have the specified offset from image source
 	//          3) use the source timestamp and track timecodes to identify the synchronisation and use image source as reference
 	//
-	std::vector<FrameOffseter> frameConverters;
+	std::vector<FrameOffsetter> frameConverters;
 	for( unsigned c = 0; c < data.c3ds.size(); ++c )
 	{
 		if( data.haveSourceTimestamp && data.c3ds[c].GetTimeCode().valid )
 		{
-			FrameOffseter o( data.sourceTimestamp, data.sourceFramerate,  data.c3ds[c].GetTimeCode(), data.c3ds[c].GetFramerate() );
+			FrameOffsetter o( data.sourceTimestamp, data.sourceFramerate,  data.c3ds[c].GetTimeCode(), data.c3ds[c].GetFramerate() );
 			frameConverters.push_back( o );
 		}
 		else
 		{
 			if( !data.haveSourceFramerate && data.frameOffsets.size() == data.c3ds.size() )
 			{
-				FrameOffseter o( data.c3ds[ c ].GetFramerate(), data.c3ds[c].GetFramerate(), data.frameOffsets[c] );
+				FrameOffsetter o( data.c3ds[ c ].GetFramerate(), data.c3ds[c].GetFramerate(), data.frameOffsets[c] );
 				frameConverters.push_back( o );
 			}
 			else if( data.haveSourceFramerate && data.frameOffsets.size() == data.c3ds.size() )
 			{
-				FrameOffseter o( data.sourceFramerate, data.c3ds[c].GetFramerate(), data.frameOffsets[c] );
+				FrameOffsetter o( data.sourceFramerate, data.c3ds[c].GetFramerate(), data.frameOffsets[c] );
 				frameConverters.push_back( o );
 			}
 			else
 			{
 				// TODO: should check all .c3d files have the same framerate.
-				FrameOffseter o;
+				FrameOffsetter o;
 				frameConverters.push_back( o );
 			}
 		}
@@ -599,50 +599,30 @@ void GetSources( SData &data )
 
 void ReadEvents( SData &data )
 {
-	// we will assume the events file has entries in _frames_ not in _times_
-	// This is a strange and horrid file format, but, what ho!
-	if( data.eventsFile.compare( NO_EVENT_FILE ) != 0 )
+	// I think we should have 4 + 1 lines of column headers, and then the rest are data rows.
+	assert( lineTokens.size() >= 5 );
+
+	// parse each data row.
+	for( unsigned lc = 5; lc < lineTokens.size(); ++lc )
 	{
-		std::ifstream infi( data.eventsFile );
-		if( !infi )
+		// don't need the item number in the first column.
+		for( unsigned sc = 1; sc < lineTokens[lc].size(); ++sc )
 		{
-			std::stringstream ss;
-			ss << "Couldn't open events file: " << data.eventsFile << endl;
-			throw std::runtime_error( ss.str() );
-		}
+			// data rows should have the "item" column which header rows don't have.
+			assert( lineTokens[lc].size() == lineTokens[1].size() + 1 );
 
-		std::vector< std::vector< std::string > > lineTokens;
-		std::string line;
-		while( std::getline(infi, line) )
-		{
-			lineTokens.push_back( SplitLine( line, " " ) );
-		}
+			// column name?
+			std::string columnName = lineTokens[1][sc-1];
 
-		// I think we should have 4 + 1 lines of column headers, and then the rest are data rows.
-		assert( lineTokens.size() >= 5 );
-
-		// parse each data row.
-		for( unsigned lc = 5; lc < lineTokens.size(); ++lc )
-		{
-			// don't need the item number in the first column.
-			for( unsigned sc = 1; sc < lineTokens[lc].size(); ++sc )
+			// column value?
+			std::string valStr = lineTokens[lc][sc];
+			if( valStr.compare("NaN") != 0 )
 			{
-				// data rows should have the "item" column which header rows don't have.
-				assert( lineTokens[lc].size() == lineTokens[1].size() + 1 );
+				int frame = std::atof( valStr.c_str() );
 
-				// column name?
-				std::string columnName = lineTokens[1][sc-1];
+				data.events[ frame ].push_back( columnName );
 
-				// column value?
-				std::string valStr = lineTokens[lc][sc];
-				if( valStr.compare("NaN") != 0 )
-				{
-					int frame = std::atof( valStr.c_str() );
-
-					data.events[ frame ].push_back( columnName );
-
-					cout << "got event: " << frame << " " << columnName << endl;
-				}
+				cout << "got event: " << frame << " " << columnName << endl;
 			}
 		}
 	}

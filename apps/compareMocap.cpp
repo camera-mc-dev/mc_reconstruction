@@ -44,7 +44,7 @@ struct SData
 	std::vector< std::string > trackFiles;
 	std::vector<unsigned> trackStartFrames;
 	std::vector<C3DData> c3dData;
-	std::vector<FrameOffseter> frameOffseters;
+	std::vector<FrameOffsetter> frameOffsetters;
 
 	// these must be in same order as trackFiles
 	std::vector< std::string > skeletonFiles;
@@ -210,8 +210,8 @@ int main(int argc, char* argv[])
 		{
 			cout << "loading (c3d): " << data.trackFiles[tfc] << endl;
 			data.c3dData.push_back( C3DData( data.trackFiles[tfc] ) );
-			FrameOffseter offseter;
-			data.frameOffseters.push_back( offseter );
+			FrameOffsetter offseter;
+			data.frameOffsetters.push_back( offseter );
 		}
 	}
 
