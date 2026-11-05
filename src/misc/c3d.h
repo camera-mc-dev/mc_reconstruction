@@ -125,17 +125,17 @@ public:
 
 		// offset -= 2;
 
-		cout << othTimeCode.timecode[0] << ":"  << othTimeCode.timecode[1] << ":" << othTimeCode.timecode[2] << ":" << othTimeCode.timecode[3] << " " << endl;
-		cout << othTimeCode.offset << endl;
-		cout << refTimestamp << endl;
+		// cout << othTimeCode.timecode[0] << ":"  << othTimeCode.timecode[1] << ":" << othTimeCode.timecode[2] << ":" << othTimeCode.timecode[3] << " " << endl;
+		// cout << othTimeCode.offset << endl;
+		// cout << refTimestamp << endl;
 
-		cout << tsSubframes << endl;
-		cout << tcSubframes << endl;
-		cout << tsSubframes - tcSubframes << endl;
-		cout << tcRatio << endl;
-		cout << "---" << endl;
-		cout << offset << endl;
-		cout << ratio << endl;
+		// cout << tsSubframes << endl;
+		// cout << tcSubframes << endl;
+		// cout << tsSubframes - tcSubframes << endl;
+		// cout << tcRatio << endl;
+		// cout << "---" << endl;
+		// cout << offset << endl;
+		// cout << ratio << endl;
 	}
 
 	double ToReference( double frame )
