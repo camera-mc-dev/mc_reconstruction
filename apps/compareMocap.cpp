@@ -215,15 +215,6 @@ int main(int argc, char* argv[])
 		}
 	}
 
-	cout << "track names: " << endl;
-	unsigned long minElements = 99999999;
-	for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
-	{
-		minElements = std::min( minElements, (unsigned long)ti->second.cols() );
-		cout << "\t" << ti->first << " " << ti->second.cols() << endl;
-	}
-	cout << "min elements: " << minElements << endl;
-
 	bool done = false;
 	std::map< int, std::string > ind2id;
 	std::map< std::string, int > id2ind;
