@@ -5,198 +5,159 @@
 #include <ezc3d/ezc3d.h>
 #include <ezc3d/Header.h>
 #include <ezc3d/Data.h>
+#include <ezc3d/Parameters.h>
+#include <ezc3d/Parameter.h>
 
 #include <iostream>
 #include <cmath>
 using std::cout;
 using std::endl;
 
-void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::string, genMatrix > &points )
+
+
+
+C3DData::C3DData(std::string filePath)
 {
-    genMatrix channels;
-    LoadC3DFile( filename, startFrame, points, channels );
-}
-
-void LoadC3DFile( std::string filename, unsigned &startFrame, std::map< std::string, genMatrix > &points, genMatrix &channels )
-{
-    ezc3d::c3d c3d( filename );
-
-    auto names = c3d.pointNames();
-    auto cnames = c3d.channelNames();
-
-    int numAnalogs = c3d.header().nbAnalogs();
-
-    cout << "\t\tc3d reader: names: " << names.size() << "  cnames: " << cnames.size() << " numAnalogs: " << numAnalogs << endl;
-    cout << "\t\t            names: ";
-    for( unsigned nc = 0; nc < names.size(); ++nc )
-    {
-        cout << names[nc] << " ";
-    }
-    cout << endl;
-    cout << "\t\t            cnames: ";
-    for( unsigned nc = 0; nc < cnames.size(); ++nc )
-    {
-        cout << cnames[nc] << " ";
-    }
-    cout << endl;
-
-    unsigned numFrames  = c3d.header().nbFrames();
-    unsigned firstFrame = c3d.header().firstFrame();
-    cout << "\t\t            nframes, fframe: " << numFrames << " " << firstFrame << endl;
-
-    for( unsigned nc = 0; nc < names.size(); ++nc )
-    {
-        points[ names[nc] ] = genMatrix::Zero(6, numFrames + firstFrame);
-    }
-
-    unsigned analogSubframes = c3d.header().nbAnalogByFrame();
-    unsigned numAnalogFrames = (numFrames + firstFrame) * analogSubframes;
-    channels = genMatrix::Zero( cnames.size(), numAnalogFrames);
-
-    for( unsigned fc = 0; fc < numFrames; ++fc )
-    {
-        for( unsigned nc = 0; nc < names.size(); ++nc )
-        {
-            hVec3D p; p << c3d.data().frame(fc).points().point(nc).x(),
-                       c3d.data().frame(fc).points().point(nc).y(),
-                       c3d.data().frame(fc).points().point(nc).z(),
-                       1.0f;
-
-            float  r = c3d.data().frame(fc).points().point(nc).residual();
-            bool   v = !c3d.data().frame(fc).points().point(nc).isEmpty();
-
-            if( v )
-                points[ names[nc] ].col(fc + firstFrame) << p(0), p(1), p(2), p(3),  r, 1.0f;
-            else
-                points[ names[nc] ].col(fc + firstFrame) << p(0), p(1), p(2), p(3),  r, 0.0f;
-        }
-
-        for( unsigned nc = 0; nc < cnames.size(); ++nc )
-        {
-            for( unsigned sfc = 0; sfc < analogSubframes; ++sfc )
-            {
-                int idx = (firstFrame*analogSubframes) + (fc*analogSubframes) + sfc;
-                channels(nc, idx) = c3d.data().frame(fc).analogs().subframe(sfc).channel(nc).data();
-            }
-        }
-    }
-
-    startFrame = firstFrame;
-}
-
-C3DData::C3DData(std::string filename)
-{
-    LoadFile(filename);
+	ezc3d::c3d c3d( filePath );
+	
+	
+	//
+	// Relevant meta-data
+	//
+	auto names = c3d.pointNames();
+	channelNames = c3d.channelNames();
+	
+	int numAnalogs = c3d.header().nbAnalogs();
+	assert( channelNames.size() == numAnalogs );
+	
+	numFrames  = c3d.header().nbFrames();
+	startFrame = c3d.header().firstFrame();
+	framerate  = c3d.header().frameRate();
+	
+	if( c3d.parameters().isGroup("TIMECODE") )
+	{
+		timecode.valid = true;
+		
+		auto g = c3d.parameters().group("TIMECODE");
+		//g.print();
+		
+		auto standard = g.parameter("STANDARD").valuesAsString()[0];
+		if( standard.compare("PAL") == 0 )
+		{
+			timecode.codeRate = 25;
+		}
+		else
+			throw std::runtime_error( "Can only handle PAL (25 Hz) in c3d TIMECODE right now" );
+		
+		timecode.offset = g.parameter("OFFSETS").valuesAsInt()[0];
+		timecode.timecode = g.parameter("TIMECODES").valuesAsInt();
+		timecode.subFrames = g.parameter("SUBFRAMESPERFRAME").valuesAsInt()[0];
+		
+		cout << filePath << " had timecode " << timecode.timecode[0] << ":" << 
+		                                        timecode.timecode[1] << ":" << 
+		                                        timecode.timecode[2] << ":" <<
+		                                        timecode.timecode[3] << "|" <<
+		                                        timecode.offset      << endl;
+	}
+	
+	
+	//
+	// point data is x,y,z,1.0, residual, valid
+	//
+	for( unsigned nc = 0; nc < names.size(); ++nc )
+	{
+		points[ names[nc] ] = genMatrix::Zero(6, numFrames );
+	}
+	
+	analogSubframes = c3d.header().nbAnalogByFrame();
+	unsigned numAnalogFrames = 0;
+	numAnalogFrames = numFrames * analogSubframes;
+	channels = genMatrix::Zero( channelNames.size(), numAnalogFrames);
+	
+	for( unsigned fc = 0; fc < numFrames; ++fc )
+	{
+		for( unsigned nc = 0; nc < names.size(); ++nc )
+		{
+			hVec3D p; p << c3d.data().frame(fc).points().point(nc).x(),
+			               c3d.data().frame(fc).points().point(nc).y(),
+			               c3d.data().frame(fc).points().point(nc).z(),
+			               1.0f;
+			
+			float  r = c3d.data().frame(fc).points().point(nc).residual();
+			bool   v = !c3d.data().frame(fc).points().point(nc).isEmpty();
+			
+			if( v )
+				points[ names[nc] ].col(fc) << p(0), p(1), p(2), p(3),  r, 1.0f;
+			else
+				points[ names[nc] ].col(fc) << p(0), p(1), p(2), p(3),  r, 0.0f;
+		}
+		
+		for( unsigned nc = 0; nc < channelNames.size(); ++nc )
+		{
+			for( unsigned sfc = 0; sfc < analogSubframes; ++sfc )
+			{
+				int idx = (fc*analogSubframes) + sfc;
+				channels(nc, idx) = c3d.data().frame(fc).analogs().subframe(sfc).channel(nc).data();
+			}
+		}
+	}
 }
 
 C3DData::~C3DData()
 {
 }
 
-bool C3DData::LoadFile(std::string filename)
+
+
+bool C3DData::GetPointAtFrame( std::string pointName, float frame, hVec3D &point)
 {
-    LoadC3DFile(filename, startFrame, points, channels);
-    numFrames = points.begin()->second.cols();
-    return true;
+	float f = frame - startFrame;
+	
+	auto p = points.find( pointName );
+	if( p == points.end() || f < 0 || f > numFrames-1 )
+	{
+		point << 0,0,0,0;
+		return false;
+	}
+	
+	unsigned f0 = (unsigned) std::floor( f );
+	unsigned f1 = (unsigned) std::ceil( f );
+	
+	f0 = std::max( 0u, f0 );
+	f1 = std::min( numFrames-1, f1 );
+	
+	// TODO: Check validity column and fix interpolation as needed
+	hVec3D p0 = p->second.col( f0 ).head(4);
+	hVec3D p1 = p->second.col( f1 ).head(4);
+	
+	float alpha = f - f0;
+	
+	point = p0 + alpha * p1;
+	
+	return true;
 }
 
-bool C3DData::GetPointDataAtFrame(float frame, std::string pointName, hVec3D &point)
+bool C3DData::GetAnalogsAtFrame(float frame, Eigen::VectorXf &data)
 {
-    if (points.find(pointName) == points.end())
-    {
-        return false;
-    }
-
-    int frame1 = static_cast<int>(frame);
-    int frame2 = frame1 + 1;
-
-    if (frame2 >= numFrames)
-    {
-        frame2 = numFrames - 1;
-    }
-
-    InterpolatePointData(frame, pointName, point);
-    return true;
+	float f = frame - startFrame;
+	if( f < 0 )
+		return false;
+	
+	float subFrame = f * analogSubframes;
+	int f0 = (int) std::floor( subFrame );
+	int f1 = (int) std::ceil( subFrame );
+	
+	f0 = std::max( 0, f0 );
+	f1 = std::min( (int)channels.cols()-1, f1 );
+	
+	Eigen::VectorXf c0 = channels.col( f0 );
+	Eigen::VectorXf c1 = channels.col( f1 );
+	
+	float alpha = subFrame - f0;
+	data = c0 + alpha * c1;
+	
+	return true;
 }
 
-bool C3DData::GetAnalogDataAtFrame(float frame, std::string channelName, float &value)
-{
-    int channelIdx = -1;
-    for (size_t i = 0; i < channels.rows(); ++i)
-    {
-        if (channels.row(i).name() == channelName)
-        {
-            channelIdx = i;
-            break;
-        }
-    }
-
-    if (channelIdx == -1)
-    {
-        return false;
-    }
-
-    int frame1 = static_cast<int>(frame);
-    int frame2 = frame1 + 1;
-
-    if (frame2 >= channels.cols())
-    {
-        frame2 = channels.cols() - 1;
-    }
-
-    InterpolateAnalogData(frame, channelName, value);
-    return true;
-}
-
-void C3DData::InterpolatePointData(float frame, std::string pointName, hVec3D &point)
-{
-    int frame1 = static_cast<int>(frame);
-    int frame2 = frame1 + 1;
-
-    if (frame2 >= numFrames)
-    {
-        frame2 = numFrames - 1;
-    }
-
-    float alpha = frame - frame1;
-
-    hVec3D p1 = points[pointName].col(frame1).head(3);
-    hVec3D p2 = points[pointName].col(frame2).head(3);
-
-    point = (1.0f - alpha) * p1 + alpha * p2;
-}
-
-void C3DData::InterpolateAnalogData(float frame, std::string channelName, float &value)
-{
-    int channelIdx = -1;
-    for (size_t i = 0; i < channels.rows(); ++i)
-    {
-        if (channels.row(i).name() == channelName)
-        {
-            channelIdx = i;
-            break;
-        }
-    }
-
-    if (channelIdx == -1)
-    {
-        return;
-    }
-
-    int frame1 = static_cast<int>(frame);
-    int frame2 = frame1 + 1;
-
-    if (frame2 >= channels.cols())
-    {
-        frame2 = channels.cols() - 1;
-    }
-
-    float alpha = frame - frame1;
-
-    float v1 = channels(channelIdx, frame1);
-    float v2 = channels(channelIdx, frame2);
-
-    value = (1.0f - alpha) * v1 + alpha * v2;
-}
 
 #endif
