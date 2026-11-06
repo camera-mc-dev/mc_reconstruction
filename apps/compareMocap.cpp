@@ -27,67 +27,51 @@ using std::endl;
 
 #include "commonConfig/commonConfig.h"
 
+
+struct STrackSource
+{
+	std::string trackFile;
+	C3DData c3d;
+	FrameOffsetter offsetter;
+	
+	bool hasSkeleton;
+	std::string skeletonFile;
+	Skeleton skeleton;
+	
+	bool hasOffset;
+	int priorOffset;
+};
+
 struct SData
 {
 	std::string dataRoot;
 	std::string testRoot;
-
+	
 	std::string offsetFile;
 	int mocapOffset;
-
+	
 	std::vector<std::string> imgDirs;
 	std::vector<std::string> vidFiles;
 	std::vector<std::string> calibFiles;
 	std::map<std::string,ImageSource*> sources;
 	std::map<std::string,unsigned> camKey2Indx;
-
-	std::vector< std::string > trackFiles;
-	std::vector<unsigned> trackStartFrames;
-	std::vector<C3DData> c3dData;
-	std::vector<FrameOffsetter> frameOffsetters;
-
-	// these must be in same order as trackFiles
-	std::vector< std::string > skeletonFiles;
-	std::vector< poseSource_t > poseDataTypes;
-	std::vector< Skeleton > skeletons;
-
+	
+	std::vector< STrackSource > tracks;
+	
+	
 	bool visualise;
 	bool useHeadless;
 	std::string headlessRenderOutput;
 	bool outputToVideo;
-
+	
 	unsigned long sourceTimestamp;
 	double sourceFramerate;
 	bool haveSourceTimestamp, haveSourceFramerate;
-
-	std::vector< unsigned > frameOffsets;
+	
+	
 };
 
-bool GetLine( SData &data, int tfc, int mfc, std::string n0, std::string n1, cv::Point &p0, cv::Point &p1)
-{
-	if( mfc < 0 )
-		return false;
-	std::stringstream ss0;
-	ss0 << std::setw(2) << std::setfill('0') << tfc << "-" << n0;
 
-	std::stringstream ss1;
-	ss1 << std::setw(2) << std::setfill('0') << tfc << "-" << n1;
-
-	auto t0 = data.tracks.find( ss0.str() );
-	auto t1 = data.tracks.find( ss1.str() );
-
-	if( t0 == data.tracks.end() || t1 == data.tracks.end() )
-		return false;
-
-	Calibration &calib = data.sources.begin()->second->GetCalibration();
-	hVec2D h0 = calib.Project( t0->second.col( mfc ).head(4) );
-	hVec2D h1 = calib.Project( t1->second.col( mfc ).head(4) );
-
-	p0 = cv::Point( h0(0), h0(1) );
-	p1 = cv::Point( h1(0), h1(1) );
-
-	return true;
-}
 
 void ParseConfig( std::string configFile, SData &data );
 void GetSources( SData &data );
@@ -151,21 +135,93 @@ int main(int argc, char* argv[])
 		cout << argv[0] << " <config file> " << endl;
 		exit(0);
 	}
-
+	
+	
+	//
+	// Find out where all our data sources are
+	//
 	SData data;
 	ParseConfig( argv[1], data );
+	
+	
+	//
+	// Get image data
+	//
 	GetSources( data );
-
+	
+	
+	
+	//
+	// Load / prepare the tracking data from .c3d files.
+	//
+	std::ofstream offsetsfi("frameOffsets");
+	for( unsigned tfc = 0; tfc < data.tracks.size(); ++tfc )
+	{
+		STrackSource &ts = data.tracks[tfc];
+		ts.c3d = C3DData( data.tracks[tfc].trackFile );
+		
+		// if we have timestamp and timecode we should use that - _but_ if user 
+		// provides an offset it will override the the other data.
+		if( !ts.hasOffset && data.haveSourceTimestamp && ts.c3d.GetTimeCode().valid )
+		{
+			cout << "Setting offset from timstamp / timecode" << endl;
+			ts.offsetter = FrameOffsetter( data.sourceTimestamp, data.sourceFramerate,  ts.c3d.GetTimeCode(), ts.c3d.GetFramerate() );
+		}
+		else
+		{
+			if( !data.haveSourceFramerate && ts.hasOffset )
+			{
+				cout << "Setting offset using c3d framerate and prior offset" << endl;
+				ts.offsetter = FrameOffsetter( ts.c3d.GetFramerate(), ts.c3d.GetFramerate(), ts.priorOffset );
+			}
+			else if( data.haveSourceFramerate && ts.hasOffset )
+			{
+				cout << "Setting offset using source and c3d framerates and prior offset" << endl;
+				ts.offsetter = FrameOffsetter( data.sourceFramerate, ts.c3d.GetFramerate(), ts.priorOffset );
+			}
+			else
+			{
+				cout << "Offset assumed to be 0" << endl;
+				// TODO: should check all .c3d files have the same framerate.
+				// otherwise offset is default init as 0 offset same framerate as video source.
+			}
+		}
+		
+		offsetsfi << ts.trackFile << " : " << ts.offsetter.GetRatio() << " " << ts.offsetter.GetOffset() << endl;
+	}
+	offsetsfi.close();
+	
+	
+	
+	
+	
+	//
+	// Map image source ids to indices.
+	//
+	bool done = false;
+	std::map< int, std::string > ind2id;
+	std::map< std::string, int > id2ind;
+	int cind = 0;
+	for( auto ci = data.sources.begin(); ci != data.sources.end(); ++ci )
+	{
+		ind2id[cind] = ci->first;
+		id2ind[ ci->first ] = cind;
+		++cind;
+	}
+	
+	
+	
+	
 	//
 	// Create renderer
 	//
 	CommonConfig ccfg;
-
+	
 	// how big are the images?
 	int r = data.sources.begin()->second->GetCalibration().height;
 	int c = data.sources.begin()->second->GetCalibration().width;
 	float ar = r/ (float) c;
-
+	
 	// create the renderer for display purposes.
 	cout << "creating renderer..." << endl;
 	std::shared_ptr<RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer> > renWrapper;
@@ -180,7 +236,7 @@ int main(int argc, char* argv[])
 	if( data.visualise )
 	{
 		renWrapper.reset( new RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer>( data.useHeadless, winW, winH, "compare mocap" ) );
-
+		
 		boost::filesystem::path p( data.headlessRenderOutput );
 		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
 		{
@@ -198,110 +254,61 @@ int main(int argc, char* argv[])
 			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
 		}
 	}
-
+	
+	
 	//
-	// Load the c3d track files.
+	// Create render node for 3D axes at scene origin
 	//
-	data.trackStartFrames.assign( data.trackFiles.size(), 0 );
-	for( auto tfc = 0; tfc < data.trackFiles.size(); ++tfc )
-	{
-		cout << "loading: " << data.trackFiles[tfc] << endl;
-		if( data.trackFiles[tfc].find(".c3d") != std::string::npos )
-		{
-			cout << "loading (c3d): " << data.trackFiles[tfc] << endl;
-			data.c3dData.push_back( C3DData( data.trackFiles[tfc] ) );
-			FrameOffsetter offseter;
-			data.frameOffsetters.push_back( offseter );
-		}
-	}
-
-	bool done = false;
-	std::map< int, std::string > ind2id;
-	std::map< std::string, int > id2ind;
-	int cind = 0;
-	for( auto ci = data.sources.begin(); ci != data.sources.end(); ++ci )
-	{
-		ind2id[cind] = ci->first;
-		id2ind[ ci->first ] = cind;
-		++cind;
-	}
-
-	if( data.offsetFile.compare("None") == 0 )
-	{
-		data.mocapOffset = 0;
-	}
-	else
-	{
-		cout << data.offsetFile << endl;
-		std::ifstream infi( data.offsetFile );
-		std::string type;
-		infi >> type;
-		if( type.compare("offset:") == 0 )
-		{
-			infi >> data.mocapOffset;
-			cout << type << " " << data.mocapOffset << endl;
-		}
-		else if( type.compare("extraOffset:") == 0 )
-		{
-			int eo;
-			infi >> eo;
-			data.mocapOffset = minElements - data.sources.begin()->second->GetNumImages() + eo;
-			cout << type << " " << eo << " ( " << data.mocapOffset << " ) " << endl;
-
-			infi.close();
-			std::ofstream outfi(data.offsetFile);
-
-			outfi << "offset: " << data.mocapOffset << endl;
-			outfi << "extraOffset: " << eo << endl;
-			outfi << endl;
-			outfi << "-------------" << endl;
-			outfi << "offset set manually using extraOffset that was most consistent over dataset" << endl << endl;
-		}
-	}
-
 	auto axesNode = Rendering::GenerateAxisNode3D( 500, "axesNode", renWrapper->GetActive() );
 	renWrapper->Get3dRoot()->AddChild(axesNode);
-
+	
+	
+	
+	
+	
+	
+	//
+	// Run the rendering loop.
+	//
+	
 	cind = 0;
-	bool paused = false;
+	bool paused = true;
 	int camChange = 0;
 	int frameAdvance = 0;
-
-	int mfc = std::min(0, data.mocapOffset);
+	
+	int curFrame = 0;
+	
+	
 	cv::Mat img;
 	while(!done)
 	{
-		int vfc = mfc - data.mocapOffset;
-		if( data.visualise )
-		{
-			int fc = data.sources.begin()->second->GetCurrentFrameID();
-			cout << endl << vfc << " (" << fc << ") " << mfc << " " << data.tracks.begin()->second.cols() << endl;
-		}
-		else
-		{
-			cout << endl << vfc << " " << mfc << " " << data.tracks.begin()->second.cols() << endl;
-		}
-
+		curFrame = data.sources.begin()->second->GetCurrentFrameID();
+		cout << "current image source frame: " << curFrame << endl;
+		
+		
 		Calibration &calib = data.sources[ ind2id[cind] ]->GetCalibration();
-
+		
+		
+		
 		if( data.visualise )
 		{
 			img = data.sources[ ind2id[cind] ]->GetCurrent().clone();
-
+			
 			renWrapper->Get2dBgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
 			renWrapper->Get3dCamera()->SetFromCalibration( calib, 500, 15000 );
 			renWrapper->Get2dFgCamera()->SetOrthoProjection(0, img.cols, 0, img.rows, -10, 10);
-
-			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
+			
+			for( unsigned trc = 0; trc < data.tracks.size(); ++trc )
 			{
-				if( mfc-2 < 0 || mfc+2 >=  ti->second.cols() )
-					continue;
-
-				int a = ti->first.find("-");
-				int n = atoi( std::string( ti->first.begin(), ti->first.begin()+a ).c_str() );
-
+				STrackSource &ts = data.tracks[trc];
+				
+				// what track frame do we want?
+				double mfc = ts.offsetter.FromReference( curFrame );
+				cout << curFrame << " -> " << mfc << endl;
+				
+				// pick a colour for this track.
 				cv::Scalar colour;
-				switch( n )
+				switch( trc )
 				{
 					case 0: colour = cv::Scalar( 255,   0, 255 ); break;
 					case 1: colour = cv::Scalar(   0, 255,   0 ); break;
@@ -310,46 +317,58 @@ int main(int argc, char* argv[])
 					case 4: colour = cv::Scalar( 255,   0,   0 ); break;
 					case 5: colour = cv::Scalar(   0, 255, 255 ); break;
 				}
-
-				hVec2D c = calib.Project( ti->second.col( mfc    ).head(4) );
-
-				cv::circle( img, cv::Point( c(0), c(1) ), 4, colour, 3 );
-			}
-
-			for( auto tfc = 0; tfc < data.trackFiles.size(); ++tfc )
-			{
-				cv::Scalar colour;
-				switch( tfc )
+				
+				
+				// draw a circle for each point after projection.
+				auto names = ts.c3d.GetPointNames();
+				for( unsigned nc = 0; nc < names.size(); ++nc )
 				{
-					case 0: colour = cv::Scalar( 255,   0, 255 ); break;
-					case 1: colour = cv::Scalar(   0, 255,   0 ); break;
-					case 2: colour = cv::Scalar(   0,   0, 255 ); break;
-					case 3: colour = cv::Scalar( 255, 255,   0 ); break;
-					case 4: colour = cv::Scalar( 255,   0,   0 ); break;
-					case 5: colour = cv::Scalar(   0, 255, 255 ); break;
-				}
-				std::stringstream ss;
-
-				cv::Point a, b;
-				auto pnames = data.skeletons[tfc].GetNames();
-				for( auto i = pnames.begin(); i != pnames.end(); ++i )
-				{
-					std::string parent = data.skeletons[tfc].GetParent( i->second );
-
-					if( GetLine( data, tfc, mfc, i->second, parent, a, b) )
+					hVec3D p;
+					
+					if( ts.c3d.GetPointAtFrame( names[nc], mfc, p ) )
 					{
-						if( data.skeletons[tfc].IsLeft( i->second ) || data.skeletons[tfc].IsLeft( parent ) )
-							cv::line( img, a, b, colour, 2 );
-						else
-							cv::line( img, a, b, colour/2, 2 );
+						hVec2D p2 = calib.Project( p );
+						cv::circle( img, cv::Point( p2(0), p2(1) ), std::max(8,img.rows/200), colour, 4 );
 					}
-
 				}
-
+				
+				//
+				// Next, we need/want to draw the skeleton
+				//
+				if( ts.hasSkeleton )
+				{
+					colour = 0.7 * colour;
+					
+					
+					auto pnames = ts.skeleton.GetNames();
+					
+					for( auto pni = pnames.begin(); pni != pnames.end(); ++pni )
+					{
+						std::string parent = ts.skeleton.GetParent( pni->second );
+						
+						hVec3D a,b;
+						if( 
+						    ts.c3d.GetPointAtFrame( pni->second, mfc, a ) &&
+						    ts.c3d.GetPointAtFrame(      parent, mfc, b )
+						  )
+						{
+							hVec2D a2 = calib.Project( a );
+							hVec2D b2 = calib.Project( b );
+							
+							if( ts.skeleton.IsLeft( pni->second ) || ts.skeleton.IsLeft( parent ) )
+								cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), colour, 2 );
+							else
+								cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), colour/2, 2 );
+						}
+						
+						
+					}
+					
+				}
 			}
-
+			
 			renWrapper->SetBGImage(img);
-
+			
 			frameAdvance = 0;
 			if( data.useHeadless )
 				done = renWrapper->StepEventLoop();
@@ -362,10 +381,10 @@ int main(int argc, char* argv[])
 				}
 			}
 			cout << "cc, fa: " << camChange << " " << frameAdvance << " " << cind << endl;
-			if( vfc >= 0 && (!paused || (paused && frameAdvance == 1 )) )
+			if( curFrame >= 0 && (!paused || (paused && frameAdvance == 1 )) )
 				for( auto sidi = data.sources.begin(); sidi != data.sources.end(); ++sidi )
 					done = done || !sidi->second->Advance();
-
+			
 			if( camChange != 0 )
 			{
 				if( camChange > 0 && cind < ind2id.size()-1 )
@@ -376,11 +395,11 @@ int main(int argc, char* argv[])
 					--cind;
 				camChange = 0;
 			}
-
+			
 			if( data.useHeadless )
 			{
 				cv::Mat cap = renWrapper->Capture();
-
+			
 				if( data.outputToVideo )
 				{
 					vidWriter->Write( cap );
@@ -392,12 +411,12 @@ int main(int argc, char* argv[])
 					cout << ss.str() << endl;
 					SaveImage( cap, ss.str() );
 				}
-
+				
 			}
 		}
-
-		++mfc;
-		done = done || mfc >= data.tracks.begin()->second.cols();
+		
+		
+		
 
 	}
 }
@@ -449,14 +468,37 @@ void ParseConfig( std::string configFile, SData &data )
 			}
 		}
 
-		libconfig::Setting &trkfs = cfg.lookup("trackFiles");
-		for( unsigned tfc = 0; tfc < trkfs.getLength(); ++tfc )
+		libconfig::Setting &trks = cfg.lookup("trackData");
+		for( unsigned tfc = 0; tfc < trks.getLength(); ++tfc )
 		{
+			STrackSource ts;
+			
 			std::stringstream ss;
-			ss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) trkfs[tfc];
-			data.trackFiles.push_back( ss.str() );
+			ss << data.dataRoot << "/" << data.testRoot << "/" << (const char*) trks[tfc].lookup("trackFile");
+			ts.trackFile = ss.str();
+			
+			if( trks[tfc].exists("frameOffset") )
+			{
+				ts.priorOffset = trks[tfc].lookup("frameOffset");
+				ts.hasOffset   = true;
+			}
+			else
+				ts.hasOffset = false;
+			
+			if( trks[tfc].exists("skeletonFile") )
+			{
+				ts.hasSkeleton = true;
+				ss.str("");
+				ss << data.dataRoot << data.testRoot << (const char*) trks[tfc].lookup("skeletonFile");
+				ts.skeletonFile = ss.str();
+				ts.skeleton = Skeleton( ss.str() );
+			}
+			else
+				ts.hasSkeleton = false;
+			
+			data.tracks.push_back( ts );
 		}
-
+		
 		if( cfg.exists("visualise") )
 		{
 			data.visualise = cfg.lookup("visualise");
@@ -467,22 +509,9 @@ void ParseConfig( std::string configFile, SData &data )
 				data.headlessRenderOutput = data.dataRoot + data.testRoot + (const char*) cfg.lookup("renderTarget");
 			}
 		}
-
-		data.offsetFile = "None";
-		if( cfg.exists("offsetFile") )
-			data.offsetFile = data.dataRoot + data.testRoot + (const char*) cfg.lookup("offsetFile");
-
-		libconfig::Setting &skfs = cfg.lookup("skeletonFiles");
-		assert( skfs.getLength() == data.trackFiles.size() );
-		for( unsigned c = 0; c < skfs.getLength(); ++c )
-		{
-			std::string s = (const char*) skfs[c];
-			std::stringstream ss;
-			ss << data.dataRoot << data.testRoot << s;
-			data.skeletonFiles.push_back( ss.str() );
-			data.skeletons.push_back( Skeleton( s ) );
-		}
-
+		
+		
+		
 		if( cfg.exists("imgSourceTimestamp") )
 		{
 			data.sourceTimestamp = cfg.lookup("imgSourceTimestamp");
@@ -493,7 +522,7 @@ void ParseConfig( std::string configFile, SData &data )
 			data.sourceTimestamp = 0;
 			data.haveSourceTimestamp = false;
 		}
-
+		
 		if( cfg.exists("imgSourceFramerate") )
 		{
 			data.sourceFramerate = cfg.lookup("imgSourceFramerate");
@@ -504,19 +533,9 @@ void ParseConfig( std::string configFile, SData &data )
 			data.sourceFramerate = 0.0;
 			data.haveSourceFramerate = false;
 		}
-
-		if( cfg.exists("frameOffsets") )
-		{
-			libconfig::Setting &foffs = cfg.lookup("frameOffsets");
-			assert( foffs.getLength() == data.vidFiles.size() ||
-			        foffs.getLength() == data.imgDirs.size()     );
-
-			for( unsigned c = 0; c < foffs.getLength(); ++c )
-			{
-				data.frameOffsets.push_back( foffs[c] );
-			}
-		}
-
+		
+		
+		
 	}
 	catch( libconfig::SettingException &e)
 	{

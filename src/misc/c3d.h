@@ -11,7 +11,17 @@
 class C3DData
 {
 public:
-
+	C3DData()
+	{
+		timecode.valid = false;
+		filePath = "-:NONE-:";
+		startFrame = 0;
+		numFrames = 0;
+		analogSubframes = 0;
+		framerate = 0;
+	}
+	
+	
 	C3DData(std::string filename);
 	~C3DData();
 
@@ -86,13 +96,13 @@ public:
 		offset = 0;
 		ratio  = 1;
 	}
-	FrameOffsetter( int refFrameRate,  int othRate, int othOffsetAtRef0 )
+	FrameOffsetter( double refFrameRate,  double othRate, double othOffsetAtRef0 )
 	{
 		offset = othOffsetAtRef0;
 		ratio  = othRate / refFrameRate;
 	}
 
-	FrameOffsetter( unsigned long refTimestamp,  int refRate,  C3DData::STimeCode othTimeCode, double othRate, unsigned leapSeconds=37 )
+	FrameOffsetter( unsigned long refTimestamp,  double refRate,  C3DData::STimeCode othTimeCode, double othRate, unsigned leapSeconds=37 )
 	{
 		//
 		// Now this gets... interesting. We _could_ be dealing with up to 3 different time formats:
@@ -148,6 +158,9 @@ public:
 	{
 		return (frame + offset) * ratio;
 	}
+	
+	double GetOffset() {return offset;}
+	double GetRatio() {return ratio;}
 
 private:
 

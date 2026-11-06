@@ -133,9 +133,15 @@ bool C3DData::GetPointAtFrame( std::string pointName, float frame, hVec3D &point
 	hVec3D p0 = p->second.col( f0 ).head(4);
 	hVec3D p1 = p->second.col( f1 ).head(4);
 	
-	float alpha = f - f0;
+	// cout << frame << " : " <<  f0 << " " << f << " " << f1 << endl;
+	// point = p0;
 	
-	point = p0 + alpha * p1;
+	float a = 0;
+	if( (f1 - f0) > 0 )
+		a = (f - f0) / (f1-f0);
+	
+	point = p0 + a*(p1-p0);
+	
 	
 	return true;
 }
@@ -153,11 +159,15 @@ bool C3DData::GetAnalogsAtFrame(float frame, Eigen::VectorXf &data)
 	f0 = std::max( 0, f0 );
 	f1 = std::min( (int)channels.cols()-1, f1 );
 	
+	float a = 0;
+	if( (f1 - f0) > 0 )
+		a = (f - f0) / (f1-f0);
+	
 	Eigen::VectorXf c0 = channels.col( f0 );
 	Eigen::VectorXf c1 = channels.col( f1 );
 	
-	float alpha = subFrame - f0;
-	data = c0 + alpha * c1;
+	
+	data = c0 + alpha * (c1-c0);
 	
 	return true;
 }
