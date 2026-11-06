@@ -5,6 +5,20 @@
 #include <string>
 #include <vector>
 
+
+unsigned CalculateFrameOffset( C3DData::STimecode reference, std::vector<unsigned> targetCode, unsigned targetSubframes )
+{
+	//returns the number of "subframes" required to move from the reference timecode to the target timecode
+}
+
+unsigned long AdvanceTimestampToFrame( unsigned long inputTimestamp, double framerate, unsigned targetFrame )
+{
+	// assuming the inputTimestamp corresponds to frame 0 of some video,
+    // is microseconds since the unix epoch, and the framerate is Hz,
+	// return the timecode of the targetFrame.
+}
+
+
 int main( int argc, char* argv[] )
 {
 	if( argc != 4 )
@@ -57,8 +71,8 @@ int main( int argc, char* argv[] )
 	//
 	// Using the c3d.timecode as reference, find which c3d frame corresponds to the provided timecodes.
 	//
-	unsigned c3dFrameStart = GetFrameFromTimecode( startCode, subFramesStart );
-	unsigned c3dFrameEnd   = GetFrameFromTimecode(   endCode,   subFramesEnd );
+	unsigned c3dFrameStart = CalculateFrameOffset( c3d.timecode, startCode, subFramesStart );
+	unsigned c3dFrameEnd   = CalculateFrameOffset( c3d.timecode,   endCode,   subFramesEnd );
 	
 	
 	//
@@ -71,7 +85,7 @@ int main( int argc, char* argv[] )
 	//
 	// Calculate the timestamp at the new start frame
 	//
-	unsigned long newTimestamp = AdvanceTimestampToFrame( timestamp, vidFrameStart );
+	unsigned long newTimestamp = AdvanceTimestampToFrame( timestamp, framerate, vidFrameStart );
 	
 	
 	
