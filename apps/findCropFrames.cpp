@@ -5,20 +5,26 @@
 #include <string>
 #include <vector>
 
-unsigned CalculateFrameOffset(C3DData::STimeCode reference, std::vector<unsigned> targetCode, unsigned targetSubframes)
+unsigned CalculateFrameOffset(C3DData::STimeCode reference, std::vector<unsigned> targetCode, unsigned targetOffset)
 {
     // Calculate the number of "subframes" required to move from the reference timecode to the target timecode
-    unsigned referenceSubframes = 0;
-    unsigned targetSubframesTotal = 0;
-
-    // Convert reference timecode to subframes
-    referenceSubframes = (reference.timecode[0] * 3600 + reference.timecode[1] * 60 + reference.timecode[2]) * reference.codeRate * reference.subFrames + reference.timecode[3] * reference.subFrames + reference.offset;
-
-    // Convert target timecode to subframes
-    targetSubframesTotal = (targetCode[0] * 3600 + targetCode[1] * 60 + targetCode[2]) * targetCode[3] * reference.subFrames + targetSubframes;
-
-    // Calculate the difference in subframes
-    return targetSubframesTotal - referenceSubframes;
+	
+	// Convert reference timecode to subframes
+    auto referenceFrames   = reference.codeRate * 
+	                         (   reference.timecode[0] * 3600 
+	                           + reference.timecode[1] * 60 
+	                           + reference.timecode[2]         ) + reference.timecode[3];
+	auto referenceSubframes = referenceFrames * reference.subFrames + reference.offset;
+	
+	// Convert target timecode to subframes
+	auto targetFrames   = reference.codeRate * 
+	                         (   targetCode[0] * 3600 
+	                           + targetCode[1] * 60 
+	                           + targetCode[2]         ) + targetCode[3];
+	auto targetSubframes = targetFrames * reference.subFrames + targetOffset;
+	
+	// Calculate the difference in subframes
+	return targetSubframes - referenceSubframes;
 }
 
 unsigned long AdvanceTimestampToFrame(unsigned long inputTimestamp, double framerate, unsigned targetFrame)
@@ -68,11 +74,11 @@ int main(int argc, char* argv[])
 
     // Load c3d file and initialise frame offsetter
     C3DData c3d(c3dpath);
-    FrameOffsetter fo(timeStamp, framerate, c3d.timecode, c3d.framerate);
+    FrameOffsetter fo(timeStamp, framerate, c3d.GetTimeCode(), c3d.GetFramerate() );
 
     // Using the c3d.timecode as reference, find which c3d frame corresponds to the provided timecodes.
-    unsigned c3dFrameStart = CalculateFrameOffset(c3d.timecode, startCode, subFramesStart);
-    unsigned c3dFrameEnd = CalculateFrameOffset(c3d.timecode, endCode, subFramesEnd);
+    unsigned c3dFrameStart = CalculateFrameOffset(c3d.GetTimeCode(), startCode, subFramesStart);
+    unsigned c3dFrameEnd = CalculateFrameOffset(c3d.GetTimeCode(), endCode, subFramesEnd);
 
     // Find out the video frame of the start and end timecodes
     unsigned vidFrameStart = fo.ToReference(c3dFrameStart);
