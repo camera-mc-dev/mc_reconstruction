@@ -5,94 +5,86 @@
 #include <string>
 #include <vector>
 
-
-unsigned CalculateFrameOffset( C3DData::STimecode reference, std::vector<unsigned> targetCode, unsigned targetSubframes )
+unsigned CalculateFrameOffset(C3DData::STimeCode reference, std::vector<unsigned> targetCode, unsigned targetSubframes)
 {
-	//returns the number of "subframes" required to move from the reference timecode to the target timecode
+    // Calculate the number of "subframes" required to move from the reference timecode to the target timecode
+    unsigned referenceSubframes = 0;
+    unsigned targetSubframesTotal = 0;
+
+    // Convert reference timecode to subframes
+    referenceSubframes = (reference.timecode[0] * 3600 + reference.timecode[1] * 60 + reference.timecode[2]) * reference.codeRate * reference.subFrames + reference.timecode[3] * reference.subFrames + reference.offset;
+
+    // Convert target timecode to subframes
+    targetSubframesTotal = (targetCode[0] * 3600 + targetCode[1] * 60 + targetCode[2]) * targetCode[3] * reference.subFrames + targetSubframes;
+
+    // Calculate the difference in subframes
+    return targetSubframesTotal - referenceSubframes;
 }
 
-unsigned long AdvanceTimestampToFrame( unsigned long inputTimestamp, double framerate, unsigned targetFrame )
+unsigned long AdvanceTimestampToFrame(unsigned long inputTimestamp, double framerate, unsigned targetFrame)
 {
-	// assuming the inputTimestamp corresponds to frame 0 of some video,
-    // is microseconds since the unix epoch, and the framerate is Hz,
-	// return the timecode of the targetFrame.
+    // Calculate the duration in microseconds for the target frame
+    unsigned long durationMicroseconds = static_cast<unsigned long>(targetFrame * (1.0 / framerate) * 1e6);
+
+    // Add the duration to the input timestamp
+    return inputTimestamp + durationMicroseconds;
 }
 
-
-int main( int argc, char* argv[] )
+int main(int argc, char* argv[])
 {
-	if( argc != 4 )
-	{
-		cout << "Identify cutting frames for a video file such that they align with the given timecodes, with reference to the given .c3d file" << endl;
-		cout << "Usage: " << endl;
-		cout << argv[0] << " <video timestamp (microseconds)>  <video framerate>   <referece .c3d path>  <start timecode> <end timecode>" << endl;
-		cout << endl;
-		cout << "Note: Timecodes should include 'subframes' as hrs:mins:secs:frames|subframes" << endl;
-		exit(0);
-	}
-	
-	
-	unsigned long timeStamp = std::atoi( argv[1] );
-	double        framerate = std::atod( argv[2] );
-	
-	std::string c3dpath( argv[3] );
-	std::string startCodeStr( argv[4] );
-	std::string endCodeStr( argv[5] );
-	
-	
-	//
-	// Split codes and convert to ints
-	//
-	std::vector<unsigned> startCode, endCode;
-	unsigned subFramesStart = 0;
-	unsigned subFramesEnd   = 0;
-	auto sc = SplitLine( startCodeStr, ":|" );
-	auto ec = SplitLine( startCodeStr, ":|" );
-	
-	assert( len(sc) == 5 );
-	assert( len(ec) == 5 );
-	for( unsigned c = 0; c < 4; ++c )
-	{
-		startCode[c]  = std::atoi( sc[c] );
-		endCode[c]    = std::atoi( ec[c] );
-	}
-	subFramesStart = std::atoi( sc.back() );
-	subFramesEnd   = std::atoi( ec.back() );
-	
-	
-	
-	//
-	// Load c3d file and initialise frame offsetter
-	//
-	C3DData c3d( c3dpath );
-	FrameOffsetter fo( timeStamp,  framerate,  c3d.timecode, c3d.framerate );
-	
-	
-	//
-	// Using the c3d.timecode as reference, find which c3d frame corresponds to the provided timecodes.
-	//
-	unsigned c3dFrameStart = CalculateFrameOffset( c3d.timecode, startCode, subFramesStart );
-	unsigned c3dFrameEnd   = CalculateFrameOffset( c3d.timecode,   endCode,   subFramesEnd );
-	
-	
-	//
-	// Find out the video frame of the start and end timecodes
-	//
-	unsigned vidFrameStart = fo.ToReference( c3dFrameStart );
-	unsigned vidFrameEnd   = fo.ToReference(   c3dFrameEnd );
-	
-	
-	//
-	// Calculate the timestamp at the new start frame
-	//
-	unsigned long newTimestamp = AdvanceTimestampToFrame( timestamp, framerate, vidFrameStart );
-	
-	
-	
-	cout << "------------" << endl;
-	cout << "new start frame: " << vidFrameStart << endl;
-	cout << "new   end frame: " << vidFrameEnd   << endl;
-	cout << "new timestamp  : " << newTimestamp  << endl;
-	
-	
+    if (argc != 6)
+    {
+        std::cout << "Identify cutting frames for a video file such that they align with the given timecodes, with reference to the given .c3d file" << std::endl;
+        std::cout << "Usage: " << std::endl;
+        std::cout << argv[0] << " <video timestamp (microseconds)>  <video framerate>   <reference .c3d path>  <start timecode> <end timecode>" << std::endl;
+        std::cout << std::endl;
+        std::cout << "Note: Timecodes should include 'subframes' as hrs:mins:secs:frames|subframes" << std::endl;
+        exit(0);
+    }
+
+    unsigned long timeStamp = std::atoi(argv[1]);
+    double framerate = std::atof(argv[2]);
+
+    std::string c3dpath(argv[3]);
+    std::string startCodeStr(argv[4]);
+    std::string endCodeStr(argv[5]);
+
+    // Split codes and convert to ints
+    std::vector<unsigned> startCode, endCode;
+    unsigned subFramesStart = 0;
+    unsigned subFramesEnd = 0;
+    auto sc = SplitLine(startCodeStr, ":|");
+    auto ec = SplitLine(endCodeStr, ":|");
+
+    assert(sc.size() == 5);
+    assert(ec.size() == 5);
+    for (unsigned c = 0; c < 4; ++c)
+    {
+        startCode.push_back(std::atoi(sc[c].c_str()));
+        endCode.push_back(std::atoi(ec[c].c_str()));
+    }
+    subFramesStart = std::atoi(sc.back().c_str());
+    subFramesEnd = std::atoi(ec.back().c_str());
+
+    // Load c3d file and initialise frame offsetter
+    C3DData c3d(c3dpath);
+    FrameOffsetter fo(timeStamp, framerate, c3d.timecode, c3d.framerate);
+
+    // Using the c3d.timecode as reference, find which c3d frame corresponds to the provided timecodes.
+    unsigned c3dFrameStart = CalculateFrameOffset(c3d.timecode, startCode, subFramesStart);
+    unsigned c3dFrameEnd = CalculateFrameOffset(c3d.timecode, endCode, subFramesEnd);
+
+    // Find out the video frame of the start and end timecodes
+    unsigned vidFrameStart = fo.ToReference(c3dFrameStart);
+    unsigned vidFrameEnd = fo.ToReference(c3dFrameEnd);
+
+    // Calculate the timestamp at the new start frame
+    unsigned long newTimestamp = AdvanceTimestampToFrame(timeStamp, framerate, vidFrameStart);
+
+    std::cout << "------------" << std::endl;
+    std::cout << "new start frame: " << vidFrameStart << std::endl;
+    std::cout << "new   end frame: " << vidFrameEnd << std::endl;
+    std::cout << "new timestamp  : " << newTimestamp << std::endl;
+
+    return 0;
 }
