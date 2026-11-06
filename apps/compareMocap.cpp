@@ -63,6 +63,7 @@ struct SData
 	bool useHeadless;
 	std::string headlessRenderOutput;
 	bool outputToVideo;
+	bool saveRender;
 	
 	unsigned long sourceTimestamp;
 	double sourceFramerate;
@@ -237,21 +238,27 @@ int main(int argc, char* argv[])
 	{
 		renWrapper.reset( new RenWrapper<AlignRenderer, Rendering::BasicHeadlessRenderer>( data.useHeadless, winW, winH, "compare mocap" ) );
 		
-		boost::filesystem::path p( data.headlessRenderOutput );
-		if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+		if( data.useHeadless || data.saveRender )
 		{
-			// output is to a directory.
-			data.outputToVideo = false;
-		}
-		else if(p.extension() == ".mp4")
-		{
-			data.outputToVideo = true;
-			cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
-			vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", tmp, 25, 18, "yuv422p" ) );
-		}
-		else
-		{
-			cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+			boost::filesystem::path p( data.headlessRenderOutput );
+			if( boost::filesystem::exists(p) && boost::filesystem::is_directory(p))
+			{
+				// output is to a directory.
+				data.outputToVideo = false;
+			}
+			else if(p.extension() == ".mp4")
+			{
+				data.outputToVideo = true;
+				cv::Mat tmp( winH, winW, CV_8UC3, cv::Scalar(0,0,0) );
+				if( data.haveSourceFramerate )
+					vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", tmp, data.sourceFramerate, 18, "yuv422p" ) );
+				else
+					vidWriter.reset( new VidWriter( data.headlessRenderOutput, "h264", tmp, 30, 18, "yuv422p" ) );
+			}
+			else
+			{
+				cout << "Headless output directory doesn't exist, or didn't recognise filename as .mp4 for video." << endl;
+			}
 		}
 	}
 	
@@ -396,12 +403,13 @@ int main(int argc, char* argv[])
 				camChange = 0;
 			}
 			
-			if( data.useHeadless )
+			if( data.useHeadless || data.saveRender )
 			{
 				cv::Mat cap = renWrapper->Capture();
 			
 				if( data.outputToVideo )
 				{
+					cout << "Saving video file." << endl;
 					vidWriter->Write( cap );
 				}
 				else
@@ -503,9 +511,16 @@ void ParseConfig( std::string configFile, SData &data )
 		{
 			data.visualise = cfg.lookup("visualise");
 			data.useHeadless = false;
+			data.saveRender  = false;
 			if( cfg.exists("renderHeadless") )
 			{
 				data.useHeadless = cfg.lookup("renderHeadless");
+				data.headlessRenderOutput = data.dataRoot + data.testRoot + (const char*) cfg.lookup("renderTarget");
+			}
+			
+			if( !data.useHeadless && cfg.exists("renderTarget" ) )
+			{
+				data.saveRender = true;
 				data.headlessRenderOutput = data.dataRoot + data.testRoot + (const char*) cfg.lookup("renderTarget");
 			}
 		}
