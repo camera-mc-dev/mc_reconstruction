@@ -14,6 +14,10 @@
 #include <stdexcept>
 #include <boost/filesystem.hpp>
 
+
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
 // 
 // Input structure:
 //
@@ -35,6 +39,7 @@ struct PersonPose
 	cv::Rect representativeBB;
 	
 	int personID;
+	
 };
 
 
@@ -49,6 +54,9 @@ struct PersonPose3D
 {
 	std::map<int, hVec3D > joints;
 	std::map<int,PersonPose> camPers;
+	
+	// serialize the 3D pose to a json structure.
+	json ToJson();
 };
 
 
