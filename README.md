@@ -2,22 +2,35 @@
 
 ## Introduction
 
-`mc_reconstruction` is part of the `mc_dev` set of repositories and contains functionality for 3D reconstruction. The main fuctionality is
+`mc_reconstruction` is part of the `mc_dev` set of repositories. The main aim of this repository is to enable cross-camera person association, tracking, and 3D reconstruction of sparse human pose detection (things like OpenPose, AlphaPose etc). The main functionality consists of:
 
-  - Occupancy maps
-  - Occupancy tracking
-  - sparse pose fusion
-  - rendering of fused poses.
+  - Occupancy maps: Used for cross-camera person/object association
+  - Occupancy tracking: Used to track objects through an occupancy map.
+  - sparse pose fusion: 
+  - rendering tools:
+    - sparse pose detections
+    - project .c3d files of markers or fused poses.
+    - visually compare .c3d files of markers or fused poses.
 
-The CAMERA wiki provides an overview of the various other parts of `mc_dev`.
+The `mc_base` repository's README, or the CAMERA internal wiki, provide an overview of the various other parts of `mc_dev`.
 
 ## Getting the source
 
-The source is mostly developed by Murray Evans as part of the university of Bath's CAMERA research group. The source can be pulled from the CAMERA git server *rivendell* - please see the CAMERA wiki for details on using and accessing the git server.
+The source is mostly developed by Murray Evans as part of the University of Bath's CAMERA research group. The source is publicly available through CAMERA's GitHub [organisation](https://github.com/camera-mc-dev) or through the CAMERA git server, `rivendell`
 
 `mc_reconstruction` depends on the `mc_core` and `mc_sds` repositories. If `mc_reconstruction` is pulled to `/devPath/mc_reconstruction` then it expects `/devPath/mc_core` and `/devPath/mc_sds`. 
 
-It is recommended to use the `mc_base` repository as well so that all relevant things can be built in one dependency tree. As such, pull the source as:
+It is recommended to use the `mc_base` repository so that all relevant things can be built in one dependency tree. As such, pull the source as:
+```bash
+  $ cd ~/where/you/keep/your/code
+  $ git clone git@github.com:camera-mc-dev/mc_base.git mc_dev
+  $ cd mc_dev
+  $ git clone git@github.com:camera-mc-dev/mc_core.git
+  $ git clone git@github.com:camera-mc-dev/mc_sds.git
+  $ git clone git@github.com:camera-mc-dev/mc_reconstruction.git
+```
+
+or
 
 ```bash
   $ cd ~/where/you/keep/your/code
@@ -27,6 +40,10 @@ It is recommended to use the `mc_base` repository as well so that all relevant t
   $ git clone camera@rivendell.cs.bath.ac.uk:mc_sds
   $ git clone camera@rivendell.cs.bath.ac.uk:mc_reconstruction
 ```
+
+## Docker
+
+The `mc_base` repository contains a number of Dockerfiles which may be appropriate to your use case, please see `mc_base` for details.
 
 ## Building
 
@@ -48,7 +65,7 @@ To build everything in optimised mode just type (using 5 build jobs):
   $ scons -j5
 ```
 
-Obviously, that will fail if you have not yet installed all the required dependencies or modified the build to find those dependencies.
+Obviously, you will need to install the dependencies before that will work.
 
 ## Dependencies
 
@@ -57,6 +74,9 @@ Obviously, that will fail if you have not yet installed all the required depende
   - EZC3D: Small library for loading and saving `.c3d` files, which are a format for motion capture data.
     - This as an easy to install library that can be acquired from github and compiled and installed as per the intructions.
     - https://github.com/pyomeca/ezc3d
+  - OpenSim (optional): OpenSim is a beastly creation used for doing physical simulations of bodies, particularly human bodies, and is popular among the biomechanics community. The output of `mc_reconstruction` can be used with `mc_opensim` to perform IK fits of an OpenSim body model to the 3D poses - as such, we provide a tool to visualise the opensim fit over the video data.
+    - This can be a PITA installation. See `mc_opensim` for some advice.
+    - This is an _optional_ dependency.
 
 
 ## Specifing where dependencies are
@@ -114,10 +134,28 @@ For more details on how the build system is set up, see the main documentation.
 `mc_reconstruction` supplies the following tools:
 
   - `occTrack`: Given a set of calibrated image sources, where each source supplies binary mask images, this is a demonstration tool for how to make use of the occupancy map and occupancy tracker classes. The tool will perform basic tracking of the masked out objects in the scene on a ground plane.
-  - `trackSparsePoses`: This uses and OccupancyMap and an OccupancyTracker to resolve the cross-camera associations and track detected people through a scene, where the person detections come from a sparse-pose detector such as OpenPose, AlphaPose, etc.
+  - `trackSparsePoses`: This uses an OccupancyMap and an OccupancyTracker to resolve the cross-camera associations and track detected people through a scene, where the person detections come from a sparse-pose detector such as OpenPose, AlphaPose, etc.
+  - `trackPoses`: More generic version of `trackSparsePoses` designed for use with sparse poses but also dense pose / segmentation sources.
   - `fuseSparsePoses`: Once you have resolved the cross-camera associations and tracked people through a scene using `trackSparsePoses`, this will perform 3D pose fusion of the individual people in each frame.
-  - `projectMocap`: Tool to project `.c3d` motion capture data into calibrated camera images. The tool can handle multiple files, but there must be only one track with any given name.
-  - `compareMocap`: Tool to project multiple `.c3d` motion capture files into calibrated camera images. Can handle multiple files that have the tracks with the same names.
+  - `timeAlign`: This special tool was used to time align marker based motion capture data with video for CAMERA's BioCV dataset (Coming Soon!)
+  - rendering tools:
+    - `renderSparsePose`: Draws sparse pose detections over the images.
+    - `projectMocap`: Tool to project `.c3d` motion capture data into calibrated camera images. The tool can handle multiple files, but there must be only one track with any given name.
+    - `compareMocap`: Tool to project multiple `.c3d` motion capture files into calibrated camera images. Can handle multiple files that have the tracks with the same names.
+    - `renderOpenSim`: Tool to project an opensim model onto image data. Particularly useful in conjunction with `mc_opensim`
+
+Full documentation of each tool, including algorithmic insights, are available.
+    
+## Common use cases
+
+### 3D reconstruction of OpenPose detections.
+
+  1) Capture calibrated and synchronised multi-camera video of your scene. For example, see the BioCV dataset. `mc_core` provides tools for calibrating a network of cameras.
+  2) Run OpenPose on each camera view, producing a directory of `.json` files for each view.
+  3) Run `trackSparsePoses` to resolve cross-camera person identities between camera views.
+  4) Run `fuseSparsePoses` to reconstruct the sparse poses in 3D
+  5) Render the output using one or more tools
+  6) use `mc_opensim` to process the fused poses with OpenSim
 
 ## Documentation
 

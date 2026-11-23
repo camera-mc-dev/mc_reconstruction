@@ -3,6 +3,7 @@
 #include "commonConfig/commonConfig.h"
 
 #include "renderer2/basicRenderer.h"
+#include "renderer2/renWrapper.h"
 
 #include <iostream>
 using std::cout;
@@ -48,6 +49,8 @@ struct SData
 	int firstFrame;
 	
 	bool visualise;
+	bool renderHeadless;
+	std::string renderTarget;
 	
 	std::string outfile;
 };
@@ -156,8 +159,7 @@ void ParseConfig( std::string cfgFile, SData &data )
 		data.trackSettings.useVisibility = cfg.lookup("useVisibility");
 		data.trackSettings.detectionThreshold = cfg.lookup("detectionThreshold");
 		
-		data.trackSettings.distanceThreshold = 12.0f;
-		data.trackSettings.numNearPeaks      = 50;
+		data.trackSettings.numTracksGuide = cfg.lookup("numTracksGuide");
 		
 		
 		data.firstFrame = 0;
@@ -167,9 +169,18 @@ void ParseConfig( std::string cfgFile, SData &data )
 		}
 		
 		data.visualise = false;
+		data.renderHeadless = false;
 		if( cfg.exists("visualise") )
 		{
 			data.visualise = cfg.lookup("visualise");
+			
+			
+			if( cfg.exists("renderHeadless") )
+			{
+				data.renderHeadless = cfg.lookup("renderHeadless");
+				if( data.renderHeadless )
+					data.renderTarget   = (const char*) cfg.lookup("renderTarget" );
+			}
 		}
 		
 		std::stringstream oss;
@@ -200,16 +211,19 @@ void LoadPoses( SData &data )
 {
 	data.pcPoses.resize( data.poseSources.size() );
 	
+	#pragma omp parallel for
 	for( unsigned sc = 0; sc < data.poseSources.size(); ++sc )
 	{
 		// type of skeleton affects how we load data :(
 		switch( data.poseDataType )
 		{
 			case POSE_JSON_DIR:
+				cout << "reading poses from directory of .json files: " << data.poseSources[sc] << endl;
 				ReadPoseDirJSON( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 			
 			case POSE_DLC_CSV:
+				cout << "reading poses from deep lab cut .csv file: " << data.poseSources[sc] << endl;
 				ReadDLC_CSV( data.poseSources[sc], data.pcPoses[sc] );
 				break;
 		}
@@ -284,13 +298,14 @@ int main( int argc, char* argv[] )
 		}
 	}
 	
-	cout << minFrame << " -> " << maxFrame << endl;
+	cout << "Running detection on frames " << minFrame << " -> " << maxFrame << endl;
 	
 	int mapRows = OM.GetMapRows();
 	int mapCols = OM.GetMapCols();
 	
+	typedef RenWrapper< Rendering::BasicPauseRenderer, Rendering::BasicHeadlessRenderer> rw_t;
+	std::shared_ptr< rw_t > renWrapper;
 	
-	std::shared_ptr< Rendering::BasicPauseRenderer > ren;
 	if( data.visualise )
 	{
 		float rat = (float)mapRows / (float)mapCols;
@@ -307,19 +322,42 @@ int main( int argc, char* argv[] )
 			renW = renH / rat;
 		}
 		
+		renWrapper.reset( new rw_t( data.renderHeadless, renW, renH, "tst" ) );
 		
-		Rendering::RendererFactory::Create( ren, renW, renH, "tst" );
-		ren->Get2dBgCamera()->SetOrthoProjection( 0, mapCols, 0, mapRows, -10, 10 );
+		renWrapper->Get2dBgCamera()->SetOrthoProjection( 0, mapCols, 0, mapRows, -10, 10 );
 	}
 	
+	// If we're doing headless rendering, where are we writing the 
+	// visuals to? We'll just write to directories for now.
+	std::string occRenDir;
+	if( data.renderHeadless )
+	{
+		std::stringstream ss; ss << data.renderTarget << "/occupancy/";
+		occRenDir = ss.str();
+		boost::filesystem::path p( occRenDir );
+		if( boost::filesystem::exists(p) && !boost::filesystem::is_directory(p))
+		{
+			throw( std::runtime_error("occupancy render target exists but is not a directory") );
+		}
+		else if( !boost::filesystem::exists(p) )
+		{
+			boost::filesystem::create_directories(p);
+		}
+	}
+	
+	
+	bool paused = false;
 	std::vector< cv::Mat > occ;
 	for( unsigned fc = minFrame; fc < maxFrame; ++fc )
 	{
 		cout << fc << endl;
+		
+		
 		//
 		// First version of this will use the representative point 
 		// of each detection.
 		//
+#ifdef OCC_FROM_POINTS
 		std::vector< std::vector< hVec2D > > points(data.pcPoses.size());
 		for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
 		{
@@ -335,19 +373,51 @@ int main( int argc, char* argv[] )
 		
 		
 		OM.OccupancyFromPoints( points, occ );
+#else
+		//
+		// Occupancy from bboxes makes more sense proably, though arms flailing out wide 
+		// coule be a complication...
+		//
+		std::vector< std::vector< cv::Rect > > bboxes( data.pcPoses.size() );
+		for( unsigned sc = 0; sc < data.pcPoses.size(); ++sc )
+		{
+			auto i = data.pcPoses[sc].find(fc);
+			if( i != data.pcPoses[sc].end() )
+			{
+				for( unsigned pc = 0; pc < i->second.size(); ++pc )
+				{
+					bboxes[sc].push_back( i->second[pc].representativeBB );
+				}
+			}
+		}
 		
+		
+		OM.OccupancyFromBBoxes( bboxes, occ );
+#endif
 		cv::Mat visOcc;
 		visOcc = OT.AddFrame( fc, occ[0] );
 		
 		if( data.visualise )
 		{
-			ren->SetBGImage( visOcc );
-			ren->StepEventLoop();
+			renWrapper->SetBGImage( visOcc );
 			
-// 			auto g = ren->Capture();
-// 			std::stringstream ss;
-// 			ss << "trk0/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
-// 			SaveImage( g, ss.str() );
+			if( data.renderHeadless )
+			{
+				renWrapper->StepEventLoop();
+				cv::Mat grab = renWrapper->Capture();
+				std::stringstream ss;
+				ss << occRenDir << "/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
+				SaveImage( grab, ss.str() );
+			}
+			else
+			{
+				bool advance = false;
+				renWrapper->ren->Step(paused, advance);
+				while( paused && !advance )
+				{
+					renWrapper->ren->Step(paused, advance);
+				}
+			}
 		}
 		
 	}
@@ -357,41 +427,69 @@ int main( int argc, char* argv[] )
 	// Get our tracks...
 	//
 	std::vector< OccupancyTracker::STrack > tracks;
+#ifdef OCCTRACK_DEBUG
+	cv::Mat debug( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
+	OT.GetTracks(tracks, ren, debug );
+#else
 	OT.GetTracks(tracks);
+#endif
 	cout << "tracks: " << tracks.size() << endl;
 	
 	
 	if( data.visualise )
 	{
+		cout << "Rendering tracks: " << endl;
+		paused = false;
 		for( unsigned tc = 0; tc < tracks.size(); ++tc )
 		{
+			std::string trkRenDir;
+			if( data.renderHeadless )
+			{
+				std::stringstream ss;
+				ss << data.renderTarget << "/trk" << std::setw(3) << std::setfill('0') << tc << "/";
+				trkRenDir = ss.str();
+				boost::filesystem::path p( trkRenDir );
+				if( boost::filesystem::exists(p) && !boost::filesystem::is_directory(p))
+				{
+					throw( std::runtime_error("track render target exists but is not a directory") );
+				}
+				else if( !boost::filesystem::exists(p) )
+				{
+					boost::filesystem::create_directories(p);
+				}
+			}
+			
+			
 			cout << tc << endl;
 			auto fi00 = tracks[tc].framePeaks.begin();
-			while( fi00 != tracks[tc].framePeaks.end() )
+			for(unsigned fc = minFrame; fc < maxFrame; ++fc )
 			{
-				OccupancyTracker::SPeak &peak = fi00->second;
-				
-				// start by drawing the gaussian of this frame peak.
 				cv::Mat visOcc = cv::Mat( mapRows, mapCols, CV_32FC3, cv::Scalar(0,0,0) );
-				
-				#pragma omp parallel for
-				for( unsigned rc = 0; rc < visOcc.rows; ++rc )
+					
+				auto fi00 = tracks[tc].framePeaks.find( fc );
+				if( fi00 != tracks[tc].framePeaks.end() )
 				{
-					for( unsigned cc = 0; cc < visOcc.cols; ++cc )
+					OccupancyTracker::SPeak &peak = fi00->second;
+					
+					// start by drawing the gaussian of this frame peak.
+										#pragma omp parallel for
+					for( unsigned rc = 0; rc < visOcc.rows; ++rc )
 					{
-						cv::Vec3f &p = visOcc.at< cv::Vec3f >(rc,cc);
-						float &v = p[2];
-						
-						// given a 2D Gaussian with mean and cov what is the value at (cc,rc)?
-						hVec2D d; d << cc,rc,1.0f;
-						d = d - peak.mean;
-						float top = exp( -0.5 * d.head(2).transpose() * peak.cov.inverse() * d.head(2) );
-						//float bot = sqrt( (2*3.1415*peak.cov).norm() ); // don't care about this for vis.
-						
-						p[1] = std::max( p[1], top * peak.confidence ) ;
+						for( unsigned cc = 0; cc < visOcc.cols; ++cc )
+						{
+							cv::Vec3f &p = visOcc.at< cv::Vec3f >(rc,cc);
+							float &v = p[2];
+							
+							// given a 2D Gaussian with mean and cov what is the value at (cc,rc)?
+							hVec2D d; d << cc,rc,1.0f;
+							d = d - peak.mean;
+							float top = exp( -0.5 * d.head(2).transpose() * peak.cov.inverse() * d.head(2) );
+							//float bot = sqrt( (2*3.1415*peak.cov).norm() ); // don't care about this for vis.
+							
+							p[1] = std::max( p[1], top * peak.confidence ) ;
+						}
 					}
 				}
-				
 				
 				// then over the top of that, draw the whole track as lines.
 				auto fi0 = tracks[tc].framePeaks.begin();
@@ -407,11 +505,28 @@ int main( int argc, char* argv[] )
 					++fi1;
 				}
 				
-				ren->SetBGImage(visOcc);
-				ren->StepEventLoop();
+				renWrapper->SetBGImage( visOcc );
+			
+				if( data.renderHeadless )
+				{
+					renWrapper->StepEventLoop();
+					cv::Mat grab = renWrapper->Capture();
+					std::stringstream ss;
+					ss << trkRenDir << "/" << std::setw(6) << std::setfill('0') << fc << ".jpg";
+					SaveImage( grab, ss.str() );
+				}
+				else
+				{
+					bool advance = false;
+					renWrapper->ren->Step(paused, advance);
+					while( paused && !advance )
+					{
+						renWrapper->ren->Step(paused, advance);
+					}
+				}
 				
 				
-				std::this_thread::sleep_for(std::chrono::milliseconds(10));
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				++fi00;
 			}
 			

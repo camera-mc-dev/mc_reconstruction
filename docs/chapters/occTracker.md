@@ -25,36 +25,29 @@ The result is that, for each frame, the tracker has a set of peaks represented b
 
 #### Tracking
 
-Tracking is best described as the process of associating frames from one frame to its neighbouring frames in time.
+Tracking is fundamentally the process of determining from a set of detections how many objects are in the scene at any one time, and associating a detection to each object at each time instant.
 
-To do this, we initialise all detection peaks as one frame tracks, which all go into a single vector. Because we do this one frame at a time, we know that peaks of the same frame are closer to each other in the vector than peaks of distance frames.
+We've taken a somewhat simplistic approach based on the assumption that, for the type of scene we're interested in, the objects of interest tend to stay in the scene for the full duration.
 
-Next, we compute the "distance" between each track and each other track. To keep this sane, we only compute the distance between track `t` and its `numNearPeaks` tracks in the vector - this works because we know the order we added tracks means that tracks close in time are close in the vector. (It might have been more meaningul to put the one frame tracks in some kind of spatial data structure so that we could use fast nearest neighbours instead, or a limit on the distance in time, or something).
+With that in mind, we first try to work out how many objects are in the scene. We do this by assuming that most of the time the number of detections is the same as the number of objects. Thus, we take the median of the number of detections in each frame. To give the user a bit of leeway on this, we offer a config setting: `numTracksGuide`. When set to 0.5, the user will set the number of tracks to the median number of detections per frame. Setting it to 1.0 will set it to the maximum number of detections per frame, setting it to 0 will set it to the minimum number of detections per frame.
 
-The "distance" between tracks is a non-trivial computation based on their distance in time, as well as in space - see the code for the actual computation.
+We next identify the longest run of frames for which there are exactly `numTracks` detections, and take the middle frame of that run. We initialise the tracks on that middle frame very simply as one track to one detection. Then we simply track forwards and backwards in time, updating the position of a track by weighted mean of the detections in a frame, where the weight is based on the distance between detection and track, with each detection updating only one track.
 
-With those initial distances computed, we now build longer tracks by merging compatible short tracks (tracklets) together. After a merge, we need to recompute the distance of an updated track with other tracks. We always merge the "nearest" tracks until we reach our distance limit.
-
-We don't suggest that this algorithm is suitable for very long sequences (inefficient) or for sequences with very large numbers of people. However, it works.
-
-The result is a set of tracks, where each track is the result of merging tracklets and updating the gaussian at each frame.
+This is fairly naive tracking but will work fine in most relevant cases.
 
 The tracker needs to be supplied with various settings on creation:
 
 ```cpp
 	struct SOccTrackSettings
 	{
-		cv::Mat visMap;           // visibility map of the occupancy area.
-		int minVisibility;        // minimum visibility of a peak.
-		float detectionThreshold; // minimum occupancy.
+		cv::Mat visMap;             // visibility map of the occupancy area.
+		int     minVisibility;      // minimum visibility of a peak.
+		float   detectionThreshold; // minimum occupancy.
 		
-		bool useVisibility;       // when normalising occupancy is the computation count/cameras  or count/visibility?
-		int numCameras;
+		bool    useVisibility;      // when normalising occupancy is the computation count/cameras  or count/visibility?
+		int     numCameras;
 		
-		float distanceThreshold;  // this is based on the track distance, which is spatialDistance + log( timeDistance )
-		int   numNearPeaks;       // When we create the initial tracks, we compute the distance vs. the numNearPeaks 
-		                          // that come after it in space and time. A small number might mean you don't connect 
-		                          // the track fully. A large number will mean a lot of redundant calculation.
+		int     numTracksGuide;     // Adjust where we take the "median" from when 'guessing' how many objects there are in a trial.
 	};
 ```
 
@@ -91,7 +84,10 @@ minZ =  0
 maxZ =  0
 
 # map resolution
-cellSize = 10
+cellSize = 50
+
+# should we pad the size of cells? We often gain some robustness from this.
+cellPadding = 15.0
 
 # orientation of the space
 upDir = "z"
@@ -101,8 +97,7 @@ upDir = "z"
 planeLow  =    0.0
 planeHigh = 2000.0
 
-# should we pad the size of cells? We often gain some robustness from this.
-cellPadding = 5.0
+
 
 
 #
@@ -113,8 +108,7 @@ useVisibility = true;
 
 # these will probably need to be tweaked for your data.
 detectionThreshold = 0.75;
-distanceThreshold = 200.0
-numNearPeaks = 50
+numTracksGuide = 0.6;
 
 
 # If you have a sequence that doesn't really get started instantly,

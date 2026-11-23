@@ -144,6 +144,16 @@ int main(int argc, char* argv[])
 	GetSources( data );
 	ReadEvents( data );
 	
+	
+	//
+	// Show camera centres, 'cus it's nice to know.
+	//
+	for( auto si = data.sources.begin(); si != data.sources.end(); ++si )
+	{
+		cout << si->first << " : " << si->second->GetCalibration().GetCameraCentre().transpose() << endl;
+	}
+	
+	
 	//
 	// Create renderer
 	//
@@ -449,8 +459,16 @@ int main(int argc, char* argv[])
 				hVec2D d = calib.Project( ti->second.col( mfc+1  ).head(4) );
 				hVec2D e = calib.Project( ti->second.col( mfc+2  ).head(4) );
 				
-				cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), cv::Scalar(128,  0,   0), 2);
-				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), cv::Scalar(255,  0,   0), 2);
+				cv::Scalar col;
+				if( ti->first.find("_LAT_") != std::string::npos )
+					col = cv::Scalar(0,256,0);
+				else if( ti->first.find("_MED_") != std::string::npos )
+					col = cv::Scalar(256,0,256);
+				else
+					col = cv::Scalar(255,0,0);
+				
+				cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), col/2, 2);
+				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), col, 2);
 // 				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
 // 				cv::line( img, cv::Point( d(0), d(1) ), cv::Point( e(0), e(1) ), cv::Scalar(  0,  0, 128), 2);
 				

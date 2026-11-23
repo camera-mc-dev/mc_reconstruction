@@ -98,8 +98,7 @@ void ParseConfig( std::string cfgFile, SData &data )
 		data.trackSettings.useVisibility = cfg.lookup("useVisibility");
 		data.trackSettings.detectionThreshold = cfg.lookup("detectionThreshold");
 		
-		data.trackSettings.distanceThreshold = 12.0f;
-		data.trackSettings.numNearPeaks      = 50;
+		data.trackSettings.numTracksGuide = cfg.lookup("numTracksGuide");
 		
 		
 		data.firstFrame = 0;

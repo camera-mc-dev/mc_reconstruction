@@ -207,7 +207,7 @@ void PeakDetect( genMatrix inData, genMatrix &out, bool offToOn )
 					peakLoc = floor(peakLoc);
 					plog << peakLoc << endl;
 					
-					out( (int)rc, (int)peakLoc ) = 1.0f;
+					out( rc, (int)peakLoc ) = 1.0f;
 					
 				}
 				else
@@ -1079,10 +1079,12 @@ int main(int argc, char* argv[])
 	// Which we were for BioCV.
 	//
 	// In that case there could be multiple best fits - so find them all.
+
 	//
 	// To find the best fits, we're going to slide the blink signal over the flash signal
 	// which is to say, the markers over the image signal.
 	//
+
 	// We "know" that the blink signal wont end _that_ long after the flash signal - typically
 	// just a few frames. So we prevent going too far beyond the end of the flash signal.
 	//
