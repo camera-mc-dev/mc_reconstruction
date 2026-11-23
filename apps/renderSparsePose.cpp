@@ -42,13 +42,17 @@ int main( int argc, char *argv[] )
 	{
 		poseDataType = POSE_JSON_DIR;
 	}
+	else if( pstr.compare("jsonMMPose") == 0 )
+	{
+		poseDataType = POSE_JSON_MMPOSE;
+	}
 	else if( pstr.compare("dlccsv") == 0 )
 	{
 		poseDataType = POSE_DLC_CSV;
 	}
 	else
 	{
-		cout << "can only load pose data from jsonDir or dlccsv" << endl;
+		cout << "can only load pose data from jsonDir or jsonMMPose or dlccsv" << endl;
 		cout << "got: " << pstr << endl;
 		exit(0);
 	}
@@ -66,6 +70,10 @@ int main( int argc, char *argv[] )
 	{
 		case POSE_JSON_DIR:
 			ReadPoseDirJSON( argv[4], poseData );
+			break;
+		
+		case POSE_JSON_MMPOSE:
+			ReadPoseMMPoseJSON( argv[4], poseData );
 			break;
 		
 		case POSE_DLC_CSV:

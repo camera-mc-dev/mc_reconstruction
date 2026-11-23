@@ -3,13 +3,11 @@
 You can use the same configuration file for both `trackSparsePoses` and `fuseSparsePoses`, as many of the configuration parameters are shared between the two.
 
 ```bash
-
 #
-# Start with the usual path information.
+# Start with the usual data paths.
 #
-dataRoot = "/path/to/datasets/"
-testRoot = "path/to/trial/"
-
+dataRoot = "/data/"
+testRoot = "session/trial/"
 
 #
 # pose data can come in using a couple of different formats.
@@ -37,41 +35,57 @@ poseDataType = "jsonDir"
 skeletonFile = "../open.skel.cfg"
 
 
-
 #
 # Specify the raw pose detection sources themselves
 #
 poseSources = (
                  "openpose_output_00/",
+                 "openpose_output_01/",
                  "openpose_output_02/",
-                 "openpose_output_04/"
+                 "openpose_output_03/",
+                 "openpose_output_04/",
+                 "openpose_output_05/",
+                 "openpose_output_06/",
+                 "openpose_output_07/",
+                 "openpose_output_08/"
               );
 
 
+
 #
-# Then provide information about the image sources and calibration.
-# Note that the image sources are only used when visualisation is enabled,
-# and are optional, but the calibration sources are obligatory
-# 
-imgSources = (
-               "00.mp4",
-               "02.mp4",
-               "04.mp4"
-             );
-
+# Then provide calibration files for each pose source.
+#
 calibFiles = (
-               "../calib_00/00.mp4.calib",
-               "../calib_00/02.mp4.calib",
-               "../calib_00/04.mp4.calib"
+                "../calib_01/00.mp4.calib",
+                "../calib_01/01.mp4.calib",
+                "../calib_01/02.mp4.calib",
+                "../calib_01/03.mp4.calib",
+                "../calib_01/04.mp4.calib",
+                "../calib_01/05.mp4.calib",
+                "../calib_01/06.mp4.calib",
+                "../calib_01/07.mp4.calib",
+                "../calib_01/08.mp4.calib"
              );
 
+#
+# The actual image sources are optional and only needed for 
+# visualisation.
+#
+imgSources = (
+                "00.mp4",
+                "01.mp4",
+                "02.mp4",
+                "03.mp4",
+                "04.mp4",
+                "05.mp4",
+                "06.mp4",
+                "07.mp4",
+                "08.mp4"
+             );
 
-
-
-              
 #
 # This file is the _output_ of trackSparsePoses
-# It is thus _input_ to fuseSparsePoses.
+# It is thus an _input_ to fuseSparsePoses.
 #
 # It contains the cross-camera person associations
 #              
@@ -79,43 +93,79 @@ assocFile = "op.trk";
 
 
 
-
-
-
 # ----------------------
-# Occupancy Map - best to assume you have to use z-up, but it should work with y-up or x-up if you are so inclined
+# Occupancy Map specific settings.
+# normally we use z-up, but it should work with y-up or x-up if you are so inclined
 # Refer to occupancy map documentation if none of this makes sense
 # ----------------------
 
-# floor area observed
-minX =  1500.0;
-maxX = 24000.0;
-minY = -2500.0;
-maxY = 12500.0;
+# specify the extents of the observed volume
+# in z-up the minZ and maxZ are irrelevant - planeLow and planeHigh is what matters.
+minX = -1500.0;
+maxX =  1500.0;
+minY = -1500.0;
+maxY =  1500.0;
+minZ =     0.0;
+maxZ =  2500.0;
+upDir = "z";
 
-cellSize    =  100.0;
-upDir       =    "z";
-planeLow    =    0.0;
-planeHigh   = 2000.0;
-cellPadding =   10.0;
+# how big is each cell of the map, and how much should the 
+# cell be padded when determining its projection?
+# (the cell will be projected as a bounding box)
+cellSize = 100.0;
+cellPadding   = 5.0;
 
+
+# what is the top and bottom planes of a cell?
+planeLow  =    0.0;
+planeHigh = 2000.0;
+
+# What is the minimum number of views a cell needs to be 
+# visible in for occupancy to be considered?
 minVisibility = 3;
+
+# Normalise occupancy by the visibility of a cell (true) 
+# or but the total number of cameras (false)?
 useVisibility = true;
-detectionThreshold = 0.8;
+
+# Threshold at which we think a cell is occupied.
+detectionThreshold = 0.66;
+
+
+# 
+# Compute occupancy from a "representative point" (i.e. weighted mean of keypoints)
+# or, if false, from a bounding box around all keypoints of a person/object.
+# Might need more generous padding and lower threshold if true, but can lead to a 
+# cleaner, clearer detection point.
+# On the other hand, bboxes can be more robust with fewer detection ghosts but 
+# might be more prone to merge nearby objects into a single detection.
+#
+occupancyFromPoints = true;
+
 
 
 # ----------------------
-# Occupancy Tracking
-# Refer to occupancy tracking documentation for details
+# Occupancy Tracker specific settings.
 # ----------------------
-distanceThreshold = 200.0
-numNearPeaks      = 50;
+
+
+#
+# We "guess" how many objects are in the scene based on the number
+# of detections in each frame. Basically, sort the frames based on
+# how many detections there are, then take sortedFrames[ numTracksGuide*numFrames ]
+# so 0.5 gets the median, 0.0 gets the min, 1.0 the max.
+# Note, we ignore frames with no detections.
+#
+numTracksGuide = 0.5;
+
+
+
 
 
 
 
 # ----------------------
-# Fusion
+# Fusion specific settings.
 # ----------------------
 
 # We aim to save the fused pose into a .c3d file, so best to leave this 
@@ -126,12 +176,14 @@ saveC3D = true;
 # We might want to align the .c3d file with some other mocap .c3d file.
 # As such, we need a file which specifies the offset between the video
 # and mocap data.
+# If there is no offset, then comment this out.
 C3DOffsetFile = "frameOffset";
 
 # This is the directory where we will write our output files.
 # We will have one .c3d file for every person tracked and specified 
 # in the assocFile
 reconDir = "op-fused";
+
 
 # How should we resolve the left-right labelling of the fused keypoints?
 # "votes"      : Use the voting approach
@@ -153,6 +205,18 @@ singleJointDistanceThreshold = 100.0;
 # What is the minumum number of inliers to accept a single joint 
 # reconstruction?
 singleJointMinInliers = 3;
+
+
+
+# Show the debug visualisation when tracking/fusing?
+visualise = true;
+
+# the occupancy tracker can do headless rendering of that debug renderer.
+# fusion doesn't (yet)
+# The renderTarget is a directory. trackSparsePoses will output the 
+# raw occupancy and visualisations for each tracked object.
+renderHeadless = true;
+renderTarget   = "occTrkRenders/"
+
+
 ```
-
-

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 
 import meBook
 
@@ -21,7 +21,7 @@ bk.style = "book.css"
 
 bk.title    = "mc_reconstruction"
 bk.author   = "Murray"
-bk.date     = [2021,12,01]
+bk.date     = [2023,12,13]
 bk.coverImg = "imgs/cover.jpg"
 #bk.outputTypes = ["html", "word", "epub"]
 bk.outputTypes = ["html"]

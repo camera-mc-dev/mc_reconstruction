@@ -14,7 +14,8 @@ def FindOpensim(env):
     env.Append(CPPDEFINES=["USE_OPENSIM"]);
     env.Append(CPPPATH=["/opt/opensim/install/sdk/include/",
                         "/opt/opensim/install/sdk/include/OpenSim/",
-                        "/opt/opensim/install/sdk/Simbody/include/simbody" ])
+                        "/opt/opensim/install/sdk/Simbody/include/simbody",
+                        "/opt/opensim/install/sdk/spdlog/include/" ])
     env.Append(LIBPATH=["/opt/opensim/install/sdk/lib/",
                         "/opt/opensim/install/sdk/Simbody/lib/"])
     env.Append(LIBS=["fmt", "osimAnalyses", "osimActuators", "osimSimulation", "osimTools", "osimCommon", "SimTKsimbody", "SimTKcommon"])

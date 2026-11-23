@@ -450,14 +450,14 @@ int main(int argc, char* argv[])
 			
 			for( auto ti = data.tracks.begin(); ti != data.tracks.end(); ++ti )
 			{
-				if( mfc-2 < 0 || mfc+2 >=  ti->second.cols() )
-					continue;
+// 				if( mfc-2 < 0 || mfc+2 >=  ti->second.cols() )
+// 					continue;
 				
-				hVec2D a = calib.Project( ti->second.col( mfc-2  ).head(4) );
-				hVec2D b = calib.Project( ti->second.col( mfc-1  ).head(4) );
+				hVec2D a = calib.Project( ti->second.col( std::max(mfc-2,0)  ).head(4) );
+				hVec2D b = calib.Project( ti->second.col( std::max(mfc-1,0)  ).head(4) );
 				hVec2D c = calib.Project( ti->second.col( mfc    ).head(4) );
-				hVec2D d = calib.Project( ti->second.col( mfc+1  ).head(4) );
-				hVec2D e = calib.Project( ti->second.col( mfc+2  ).head(4) );
+				hVec2D d = calib.Project( ti->second.col( std::min(mfc+1, (int)ti->second.cols()-1)  ).head(4) );
+				hVec2D e = calib.Project( ti->second.col( std::min(mfc+2, (int)ti->second.cols()-1)  ).head(4) );
 				
 				cv::Scalar col;
 				if( ti->first.find("_LAT_") != std::string::npos )
@@ -467,6 +467,7 @@ int main(int argc, char* argv[])
 				else
 					col = cv::Scalar(255,0,0);
 				
+				cv::circle( img, cv::Point( c(0), c(1) ), std::max(5,img.rows/200), col, 4 );
 				cv::line( img, cv::Point( a(0), a(1) ), cv::Point( b(0), b(1) ), col/2, 2);
 				cv::line( img, cv::Point( b(0), b(1) ), cv::Point( c(0), c(1) ), col, 2);
 // 				cv::line( img, cv::Point( c(0), c(1) ), cv::Point( d(0), d(1) ), cv::Scalar(  0,  0, 255), 2);
