@@ -1090,8 +1090,12 @@ int main(int argc, char* argv[])
 	// in the config option: maxBlinkSignalLag
 	
 	std::vector<float> offErrs;
-	for( unsigned offset0 = flashSignal.rows() / 2; offset0 < flashSignal.rows() + data.maxBlinkSignalLag; ++offset0 )
+	int start = std::min( flashSignal.rows() / 2, blinkSignal.rows() / 2 );
+	for( unsigned offset0 = start; offset0 < flashSignal.rows() + data.maxBlinkSignalLag; ++offset0 )
 	{
+		// blinkSignal is 1 or -1 when blink starts / ends
+		// for each such moment, find the distance to the nearest start/end 
+		// using the bsp.
 		std::vector<float> d;
 		int cnt = 0;
 		for( unsigned c = 0; c < blinkSignal.rows(); ++c )
@@ -1100,13 +1104,17 @@ int main(int argc, char* argv[])
 			float e = bsp(1, c + offset0);
 			if( blinkSignal(c) > 0 && (s>=0 || e>=0) )
 			{
-				d.push_back( bsp(0, c + offset0) );
+				d.push_back( s );
 			}
 			else if( blinkSignal(c) < 0 && (s>=0 || e>=0))
 			{
-				d.push_back( bsp(1, c + offset0) );
+				d.push_back( e );
 			}
 		}
+		
+		// if there's a valid overlap of the signal, then 
+		// we'll have some d > 2.
+		// Take the error as the median 
 		if( d.size() > 2 )
 		{
 			std::sort(d.begin(), d.end());
@@ -1124,6 +1132,12 @@ int main(int argc, char* argv[])
 		cout << endl;
 	}
 	
+	
+	// get a copy of all the offset errors, find the median of them 
+	// all. Make a threshold at some value less than the median. 
+	// We'll assume that real offsets have errors less than that threshold,
+	// but it seems not-robust to just take the minimum as there might, in
+	// fact, be a few minimums within that region.
 	std::vector<float> offErrsCopy = offErrs;
 	std::sort( offErrsCopy.begin(), offErrsCopy.end() );
 	float medErr = offErrsCopy[ offErrsCopy.size() * 0.5 ];
@@ -1139,9 +1153,10 @@ int main(int argc, char* argv[])
 		{
 			if( offErrs[ec] < thrErr )
 			{
-				s = ec;
 				if( s < 0 )
 				{
+					// this is us entering into a region of low error.
+					s = ec;
 					cnt = 1;
 					minErr = offErrs[ec];
 				}
@@ -1149,12 +1164,14 @@ int main(int argc, char* argv[])
 				{
 					if( offErrs[ec] < minErr )
 					{
+						// we've got a new minimum
 						minErr = offErrs[ec];
 						m = ec;
 						cnt = 1;
 					}
 					else if( offErrs[ec] == minErr )
 					{
+						// we're continuing our minimum
 						m += ec;
 						cnt += 1.0f;
 					}
@@ -1162,6 +1179,8 @@ int main(int argc, char* argv[])
 			}
 			else if( s >= 0 )
 			{
+				// we've left a basin of low error.
+				// get a mean of our minimum locations.
 				offMins.push_back( round( m/cnt ) );
 				s = -1;
 				m = -1;
@@ -1174,10 +1193,10 @@ int main(int argc, char* argv[])
 		cout << "got " << offMins.size() << " possible offsets: " << endl;
 		for( unsigned oc = 0; oc < offMins.size(); ++oc )
 		{
-			cout << offMins[oc] + blinkSignal.rows() / 2 << " : " << offErrs[ offMins[oc] ] << endl;
+			cout << offMins[oc] + start  << " : " << offErrs[ offMins[oc] ] << endl;
 		}
 		cout << "taking the last one in case of repeating flash pattern." << endl;
-		minOffset0 = offMins.back() + blinkSignal.rows() / 2;
+		minOffset0 = offMins.back() + start;
 	}
 	
 	
