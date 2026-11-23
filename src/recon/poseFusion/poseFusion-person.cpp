@@ -1,7 +1,6 @@
 #include "recon/poseFusion/poseFusion.h"
 
-
-void ReconstructPerson( 
+void ReconstructPerson(
                         PersonPose3D &person,
                         Skeleton skeleton,
                         std::vector< Calibration > calibs,
@@ -12,30 +11,30 @@ void ReconstructPerson(
                       )
 {
 	int numJoints = skeleton.GetNumKeypoints();
-	
+
 	std::vector<bool> doneJoint( numJoints, false );
 	for( unsigned jc = 0; jc < numJoints; ++jc )
 	{
 // 		if( jc != 4 )
 // 			continue;
-		
+
 		// we might have already reconstructed this joint as part of a paired joint reconstruction.
 		if( doneJoint[jc] )
 			continue;
-		
+
 		int pairedJoint = skeleton.IsPair( jc );
 		if( pairedJoint >= 0 )
 		{
 			ReconstructJointPair( calibs, skeleton, jc, pairedJoint, minConf, lrd, person );
 			doneJoint[jc] = true;
 			doneJoint[pairedJoint] = true;
-			
+
 			if( std::isnan( person.joints[jc](0) ) || std::isnan(person.joints[jc](1)) || std::isnan(person.joints[jc](2) ) )
 			{
 				cout << "damn a " << jc << endl;
 				exit(0);
 			}
-			
+
 			if( std::isnan( person.joints[pairedJoint](0) ) || std::isnan(person.joints[pairedJoint](1)) || std::isnan(person.joints[pairedJoint](2) ) )
 			{
 				cout << "damn b " << pairedJoint << endl;
@@ -55,9 +54,11 @@ void ReconstructPerson(
 	}
 }
 
-
-
 json ToJson3D()
 {
-	
+	json j;
+	for (const auto& pair : joints) {
+		j[pair.first] = {pair.second(0), pair.second(1), pair.second(2)};
+	}
+	return j;
 }
