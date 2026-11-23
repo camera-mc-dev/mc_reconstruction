@@ -54,10 +54,11 @@ void ReconstructPerson(
 	}
 }
 
-json ToJson3D()
+json PersonPose3D::ToJson()
 {
 	json j;
-	for (const auto& pair : joints) {
+	for (const auto& pair : joints) 
+	{
 		j[pair.first] = {pair.second(0), pair.second(1), pair.second(2)};
 	}
 	return j;
